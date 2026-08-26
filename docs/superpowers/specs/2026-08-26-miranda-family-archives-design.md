@@ -158,7 +158,9 @@ The frontend-design skill will be used during implementation for a distinctive l
 
 ## 8. Daily digest (Resend)
 
-- pg-boss cron in the worker, daily 8:00 AM America/New_York.
+- pg-boss cron in the worker, daily 11:00 AM America/New_York (8:00 AM Pacific,
+  5:00 AM Hawaii — family is mostly West Coast/Hawaii; the email is waiting when
+  they wake up).
 - Digest-worthy events from last 24h of `audit_log`: new ready photos/documents
   (with thumbnails), new family tree people, and **major edits** — concretely:
   changes to title, description, date fields, or people-tags on media, and edits to
