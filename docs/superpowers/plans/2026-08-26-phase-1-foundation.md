@@ -653,26 +653,36 @@ ADMIN_EMAILS                      → btmclaughlin@gmail.com
 
 ---
 
-### Task 7: Production webhook + invite-only lockdown
+### Task 7: Production cutover — custom domain, Clerk production instance, invite-only lockdown
 
-**Files:** none in-repo (Clerk Dashboard/CLI + Railway variable).
+*(Rescoped 2026-08-26 by user direction: the deployed environment is production-only on `mirandafamilyarchives.com`, DNS managed at GoDaddy via the `gddy` CLI.)*
+
+**Files:** none in-repo (Railway + GoDaddy DNS + Clerk CLI/Dashboard).
 
 **Interfaces:**
-- Consumes: deployed domain (Task 6), webhook route (Task 4).
-- Produces: a fully invite-only deployed app whose users sync to Railway Postgres.
+- Consumes: deployed web service (Task 6), webhook route (Task 4), domain `mirandafamilyarchives.com` (GoDaddy-hosted DNS), authenticated `gddy` CLI.
+- Produces: the app live at `https://mirandafamilyarchives.com`, Clerk **production** instance with live keys, invite-only, users syncing to Railway Postgres.
 
-- [ ] **Step 1: Add production webhook endpoint** in Clerk (Dashboard or CLI): URL `https://<railway-domain>/api/webhooks/clerk`, events `user.created`, `user.updated`, `user.deleted`. Copy its signing secret.
+- [ ] **Step 1: Railway custom domains** — add `mirandafamilyarchives.com` and `www.mirandafamilyarchives.com` to the `web` service; record the DNS target values Railway returns.
 
-- [ ] **Step 2: Set the secret on Railway** — `CLERK_WEBHOOK_SIGNING_SECRET=<secret>` on the `web` service (triggers redeploy).
+- [ ] **Step 2: GoDaddy DNS for the app** — via `gddy`: `ALIAS @ → <railway target>` (GoDaddy supports ALIAS at apex) and `CNAME www → <railway target>`. Use `--dry-run` first; `set` is destructive.
 
-- [ ] **Step 3: Restrict sign-ups.** In Clerk: set sign-up mode to **Restricted** (invite-only) so only invited emails can join. This is a Dashboard setting (Configure → Restrictions); if the CLI/API path is unclear, ask the user to flip it and confirm.
+- [ ] **Step 3: Clerk production instance** — create a production instance for the app on `mirandafamilyarchives.com` (CLI: `clerk` instance/deploy commands; Dashboard fallback). Retrieve the production `pk_live_`/`sk_live_` keys and Clerk's required DNS records (frontend API, accounts, DKIM/mail).
 
-- [ ] **Step 4: Verify end-to-end** — send yourself an invitation via Clerk (Dashboard → Users → Invite, or `clerk` CLI), accept it on the deployed domain, sign in, then confirm the user row exists in Railway Postgres with `role = ADMIN` (query via Railway's Postgres connect or a one-off `npx prisma studio` pointed at the Railway `DATABASE_URL`). Also verify a non-invited email cannot sign up.
+- [ ] **Step 4: GoDaddy DNS for Clerk** — add Clerk's records via `gddy`; wait for Clerk's domain verification + SSL to go green.
 
-- [ ] **Step 5: Commit any doc updates and push**
+- [ ] **Step 5: Swap Railway env to production keys** — `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`/`CLERK_SECRET_KEY` → live keys on the `web` service.
+
+- [ ] **Step 6: Production webhook endpoint** — on the production instance: URL `https://mirandafamilyarchives.com/api/webhooks/clerk`, events `user.created`, `user.updated`, `user.deleted` (Dashboard if the API can't create endpoints). Set its signing secret as `CLERK_WEBHOOK_SIGNING_SECRET` on the `web` service.
+
+- [ ] **Step 7: Restrict sign-ups** on the production instance (Configure → Restrictions → Restricted); Dashboard toggle by the user if no CLI path.
+
+- [ ] **Step 8: Verify end-to-end** — `https://mirandafamilyarchives.com` serves the app over valid TLS (www redirects or serves too); send an invitation, accept, sign in, confirm the `User` row in Railway Postgres with `role = ADMIN` for btmclaughlin@gmail.com; confirm a non-invited email cannot sign up; confirm a webhook delivery shows success in Clerk.
+
+- [ ] **Step 9: Commit doc updates and push**
 
 ```bash
-git add -A && git commit -m "chore: phase 1 complete — deployed foundation" && git push
+git add -A && git commit -m "chore: phase 1 complete — production cutover to mirandafamilyarchives.com" && git push
 ```
 
 ---
