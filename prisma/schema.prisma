@@ -1,0 +1,209 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum MediaType {
+  PHOTO
+  DOCUMENT
+}
+
+enum MediaStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNSPECIFIED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+model User {
+  id            String     @id @default(cuid())
+  clerkId       String     @unique
+  email         String     @unique
+  name          String
+  avatarUrl     String?
+  role          Role       @default(MEMBER)
+  digestEnabled Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  mediaItems    MediaItem[]
+  favorites     Favorite[]
+  comments      Comment[]
+  hearts        Heart[]
+  auditLogs     AuditLog[]
+}
+
+model MediaItem {
+  id                String      @id @default(cuid())
+  type              MediaType
+  status            MediaStatus @default(UPLOADING)
+  error             String?
+  originalKey       String
+  originalFilename  String
+  originalSize      BigInt
+  mimeType          String
+  thumbKey          String?
+  webKey            String?
+  largeKey          String?
+  exif              Json?
+  title             String?
+  description       String?
+  location          String?
+  dateYear          Int?
+  dateMonth         Int?
+  dateDay           Int?
+  dateIsApproximate Boolean     @default(false)
+  uploadedById      String
+  uploadedBy        User        @relation(fields: [uploadedById], references: [id])
+  deletedAt         DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  people            MediaPerson[]
+  albumItems        AlbumItem[]
+  favorites         Favorite[]
+  comments          Comment[]
+  hearts            Heart[]
+
+  @@index([status])
+  @@index([dateYear])
+  @@index([deletedAt])
+}
+
+model Person {
+  id          String    @id @default(cuid())
+  displayName String
+  maidenName  String?
+  gender      Gender    @default(UNSPECIFIED)
+  birthYear   Int?
+  deathYear   Int?
+  birthplace  String?
+  notes       String?
+  avatarKey   String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  parents     ParentChild[] @relation("ChildSide")
+  children    ParentChild[] @relation("ParentSide")
+  spousesA    Spouse[]      @relation("SpouseA")
+  spousesB    Spouse[]      @relation("SpouseB")
+  mediaTags   MediaPerson[]
+}
+
+model ParentChild {
+  childId  String
+  parentId String
+  child    Person @relation("ChildSide", fields: [childId], references: [id])
+  parent   Person @relation("ParentSide", fields: [parentId], references: [id])
+
+  @@id([childId, parentId])
+}
+
+model Spouse {
+  personAId String
+  personBId String
+  personA   Person @relation("SpouseA", fields: [personAId], references: [id])
+  personB   Person @relation("SpouseB", fields: [personBId], references: [id])
+
+  @@id([personAId, personBId])
+}
+
+model MediaPerson {
+  mediaItemId String
+  personId    String
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id])
+  person      Person    @relation(fields: [personId], references: [id])
+
+  @@id([mediaItemId, personId])
+}
+
+model Album {
+  id           String      @id @default(cuid())
+  name         String
+  description  String?
+  coverMediaId String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  items        AlbumItem[]
+}
+
+model AlbumItem {
+  albumId     String
+  mediaItemId String
+  position    Int
+  album       Album     @relation(fields: [albumId], references: [id])
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id])
+
+  @@id([albumId, mediaItemId])
+}
+
+model Favorite {
+  userId      String
+  mediaItemId String
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id])
+
+  @@id([userId, mediaItemId])
+}
+
+model Comment {
+  id          String    @id @default(cuid())
+  mediaItemId String
+  userId      String
+  body        String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+model Heart {
+  userId      String
+  mediaItemId String
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id])
+
+  @@id([userId, mediaItemId])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String
+  entityType String
+  entityId   String
+  action     AuditAction
+  changes    Json
+  createdAt  DateTime    @default(now())
+  user       User        @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
+
+model DigestLog {
+  id        String   @id @default(cuid())
+  date      DateTime @unique @db.Date
+  sentCount Int      @default(0)
+  createdAt DateTime @default(now())
+}
