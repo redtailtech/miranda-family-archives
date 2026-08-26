@@ -665,7 +665,7 @@ ADMIN_EMAILS                      → btmclaughlin@gmail.com
 
 - [ ] **Step 1: Railway custom domains** — add `mirandafamilyarchives.com` and `www.mirandafamilyarchives.com` to the `web` service; record the DNS target values Railway returns.
 
-- [ ] **Step 2: GoDaddy DNS for the app** — via `gddy`: `ALIAS @ → <railway target>` (GoDaddy supports ALIAS at apex) and `CNAME www → <railway target>`. Use `--dry-run` first; `set` is destructive.
+- [ ] **Step 2: DNS via Cloudflare** *(revised: GoDaddy's DNS cannot host apex CNAME/ALIAS — Railway docs list it as unsupported; user chose Cloudflare nameservers)* — create the zone at Cloudflare, add `CNAME @ → 90xyn1gl.up.railway.app` (proxied, SSL mode **Full**), `CNAME www → 2c17jcam.up.railway.app` (proxied), and the five Clerk CNAMEs as **DNS-only** (grey cloud — Clerk requires unproxied). Then switch the domain's nameservers at GoDaddy to Cloudflare's pair (`gddy` with the `domains.nameserver:update` scope).
 
 - [ ] **Step 3: Clerk production instance** — create a production instance for the app on `mirandafamilyarchives.com` (CLI: `clerk` instance/deploy commands; Dashboard fallback). Retrieve the production `pk_live_`/`sk_live_` keys and Clerk's required DNS records (frontend API, accounts, DKIM/mail).
 
