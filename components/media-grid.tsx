@@ -12,34 +12,48 @@ export function MediaGrid({ query }: { query?: string } = {}) {
   const [errored, setErrored] = useState(false)
   const sentinel = useRef<HTMLDivElement>(null)
 
-  const loadMore = useCallback(async () => {
-    if (loading || done) return
-    setLoading(true)
-    try {
-      const params = [query, cursor ? `cursor=${cursor}` : null].filter(Boolean).join('&')
-      const res = await fetch(`/api/media${params ? `?${params}` : ''}`)
-      if (!res.ok) {
+  const fetchPage = useCallback(
+    async (cursorArg: string | null, append: boolean) => {
+      setLoading(true)
+      try {
+        const params = [query, cursorArg ? `cursor=${cursorArg}` : null].filter(Boolean).join('&')
+        const res = await fetch(`/api/media${params ? `?${params}` : ''}`)
+        if (!res.ok) {
+          setDone(true)
+          setErrored(true)
+          return
+        }
+        const data = await res.json()
+        setItems((prev) => (append ? [...prev, ...data.items] : data.items))
+        setCursor(data.nextCursor)
+        setDone(!data.nextCursor)
+      } catch {
         setDone(true)
         setErrored(true)
-        return
+      } finally {
+        setLoading(false)
       }
-      const data = await res.json()
-      setItems((prev) => [...prev, ...data.items])
-      setCursor(data.nextCursor)
-      if (!data.nextCursor) setDone(true)
-    } catch {
-      setDone(true)
-      setErrored(true)
-    } finally {
-      setLoading(false)
-    }
-  }, [cursor, done, loading, query])
+    },
+    [query]
+  )
 
+  const loadMore = useCallback(() => {
+    if (loading || done) return
+    fetchPage(cursor, true)
+  }, [cursor, done, loading, fetchPage])
+
+  // Reset paging state and refetch whenever the filter query changes (search,
+  // type/decade/album chips). Fetches directly rather than through loadMore
+  // so the reset isn't racing stale cursor/done state from the prior query.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadMore()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting paging state for a new filter query, not synchronizing with an external system
+    setItems([])
+    setCursor(null)
+    setDone(false)
+    setErrored(false)
+    fetchPage(null, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [query])
 
   useEffect(() => {
     const el = sentinel.current
