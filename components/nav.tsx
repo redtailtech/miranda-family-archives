@@ -31,7 +31,7 @@ export function Nav() {
   const pathname = usePathname()
   return (
     <header className="border-b border-line bg-surface">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3">
         <Link
           href="/"
           className="flex min-h-11 items-center gap-2.5 rounded-lg font-display text-2xl font-semibold tracking-tight text-ink"
