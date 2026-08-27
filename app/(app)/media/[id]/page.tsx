@@ -12,6 +12,7 @@ import { HistoryList } from '@/components/history-list'
 import { AdminItemActions } from '@/components/admin-item-actions'
 import { HeartButton } from '@/components/heart-button'
 import { CommentThread } from '@/components/comment-thread'
+import { BackSection } from '@/components/back-section'
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -34,6 +35,18 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
     <div className="mx-auto max-w-4xl">
       <Link href="/" className="text-lg underline">← Library</Link>
       <h1 className="my-4 text-3xl font-bold">{dto.title ?? dto.originalFilename}</h1>
+
+      {dto.backOf && (
+        <div className="mb-4 flex items-center gap-4 rounded-xl border border-amber/40 bg-wash p-4">
+          <p className="flex-1 text-lg">
+            This is the back of{' '}
+            <Link href={`/media/${dto.backOf.id}`} className="font-medium underline">
+              {dto.backOf.title ?? dto.backOf.filename}
+            </Link>
+            .
+          </p>
+        </div>
+      )}
 
       {dto.status === 'READY' && dto.type === 'PHOTO' && dto.webUrl && (
         <a href={dto.largeUrl ?? dto.webUrl} target="_blank" rel="noreferrer">
@@ -73,6 +86,8 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
           </p>
         </div>
       )}
+
+      {dto.status === 'READY' && dto.type === 'PHOTO' && !dto.backOfId && <BackSection item={dto} />}
 
       <div className="mt-6 flex flex-wrap items-center gap-4">
         <a

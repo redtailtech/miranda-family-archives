@@ -19,6 +19,7 @@ export function LibraryControls({
   const searchParams = useSearchParams()
 
   const type = searchParams.get('type')
+  const backs = searchParams.get('backs')
   const decade = searchParams.get('decade')
   const albumId = searchParams.get('albumId')
   const personId = searchParams.get('personId')
@@ -69,14 +70,17 @@ export function LibraryControls({
           />
 
           <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by type">
-            <Chip active={!type} onClick={() => updateParams({ type: null })}>
+            <Chip active={!type} onClick={() => updateParams({ type: null, backs: null })}>
               All
             </Chip>
-            <Chip active={type === 'PHOTO'} onClick={() => updateParams({ type: 'PHOTO' })}>
+            <Chip active={type === 'PHOTO'} onClick={() => updateParams({ type: 'PHOTO', backs: null })}>
               Photos
             </Chip>
-            <Chip active={type === 'DOCUMENT'} onClick={() => updateParams({ type: 'DOCUMENT' })}>
+            <Chip active={type === 'DOCUMENT'} onClick={() => updateParams({ type: 'DOCUMENT', backs: null })}>
               Documents
+            </Chip>
+            <Chip active={backs === '1'} onClick={() => updateParams({ backs: backs === '1' ? null : '1', type: null })}>
+              Photo backs
             </Chip>
           </div>
 

@@ -17,6 +17,7 @@ export default async function LibraryPage({
   const sp = await searchParams
   const q = first(sp.q)
   const type = first(sp.type)
+  const backs = first(sp.backs)
   const decade = first(sp.decade)
   const albumId = first(sp.albumId)
   const personId = first(sp.personId)
@@ -46,6 +47,7 @@ export default async function LibraryPage({
   const queryParams = new URLSearchParams()
   if (q) queryParams.set('q', q)
   if (type) queryParams.set('type', type)
+  if (backs) queryParams.set('backs', backs)
   if (decade) queryParams.set('decade', decade)
   if (albumId) queryParams.set('albumId', albumId)
   if (personId) queryParams.set('personId', personId)

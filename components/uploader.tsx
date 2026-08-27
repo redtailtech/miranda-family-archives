@@ -113,6 +113,7 @@ async function processFilesWithConcurrency(
   fileIds: string[],
   uppy: Uppy<Record<string, unknown>, Record<string, unknown>>,
   settledMediaIds: Set<string>,
+  backOfId: string | undefined,
 ) {
   const results: Array<{ fileId: string; successful: boolean }> = []
 
@@ -129,6 +130,7 @@ async function processFilesWithConcurrency(
         filename: file.name,
         size: file.size,
         type: file.type,
+        ...(backOfId ? { backOfId } : {}),
       })
       mediaId = response.mediaId
       key = response.key
@@ -193,11 +195,12 @@ async function processFilesWithConcurrency(
   return results
 }
 
-function createUppy() {
+function createUppy(opts: { backOfId?: string; maxFiles?: number } = {}) {
   const uppy = new Uppy<Record<string, unknown>, Record<string, unknown>>({
     restrictions: {
       maxFileSize: 2 * 1024 * 1024 * 1024,
       allowedFileTypes: ['image/tiff', 'image/jpeg', 'image/png', 'image/heic', 'image/webp', 'application/pdf', '.tif', '.tiff'],
+      ...(opts.maxFiles ? { maxNumberOfFiles: opts.maxFiles } : {}),
     },
   })
 
@@ -205,7 +208,7 @@ function createUppy() {
   const settledMediaIds = new Set<string>()
 
   uppy.addUploader(async (fileIds) => {
-    return processFilesWithConcurrency(fileIds, uppy, settledMediaIds)
+    return processFilesWithConcurrency(fileIds, uppy, settledMediaIds, opts.backOfId)
   })
 
   // Handle file removal (user cancelled)
@@ -297,8 +300,12 @@ function UploadDetailRow({ mediaId, name }: UploadedFile) {
   )
 }
 
-export function Uploader() {
-  const [uppy] = useState(createUppy)
+export function Uploader({
+  backOfId,
+  maxFiles,
+  onUploaded,
+}: { backOfId?: string; maxFiles?: number; onUploaded?: () => void } = {}) {
+  const [uppy] = useState(() => createUppy({ backOfId, maxFiles }))
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const confirm = useConfirm()
   // Uppy is constructed once outside React (createUppy), and the
@@ -310,12 +317,18 @@ export function Uploader() {
   useEffect(() => {
     confirmRef.current = confirm
   }, [confirm])
+  // Same staleness concern as confirmRef above, for the onUploaded callback.
+  const onUploadedRef = useRef(onUploaded)
+  useEffect(() => {
+    onUploadedRef.current = onUploaded
+  }, [onUploaded])
 
   useEffect(() => {
     const handleUploadSuccess = (file: ReturnType<typeof uppy.getFile> | undefined) => {
       const mediaId = (file?.meta as Record<string, unknown> | undefined)?.mediaId as string | undefined
       if (!mediaId || !file) return
       setUploadedFiles((prev) => (prev.some((f) => f.mediaId === mediaId) ? prev : [...prev, { mediaId, name: file.name ?? mediaId }]))
+      if (backOfId) onUploadedRef.current?.()
     }
     uppy.on('upload-success', handleUploadSuccess)
 
@@ -335,6 +348,10 @@ export function Uploader() {
     // any upload starts. Warn-don't-block: a decline just removes the file
     // from the batch; the server never rejects an upload on this basis.
     const handleFilesAdded = async (files: ReturnType<typeof uppy.getFile>[]) => {
+      // A back legitimately shares filename/context with its front — skip the
+      // duplicate-filename prompt loop for back uploads. The server's
+      // content-dupe warning still applies independently.
+      if (backOfId) return
       const names = files.map((f) => f.name).filter((n): n is string => Boolean(n))
       if (names.length === 0) return
       try {
@@ -362,12 +379,12 @@ export function Uploader() {
       uppy.off('cancel-all', handleCancelAll)
       uppy.off('files-added', handleFilesAdded)
     }
-  }, [uppy])
+  }, [uppy, backOfId])
 
   return (
     <div>
       <Dashboard uppy={uppy} proudlyDisplayPoweredByUppy={false} height={420} note="Photos (TIFF, JPEG, PNG, HEIC, WebP) and PDF documents, up to 2 GB each" />
-      {uploadedFiles.length > 0 && (
+      {uploadedFiles.length > 0 && !backOfId && (
         <div className="mt-4">
           <p className="text-lg">
             {uploadedFiles.length} file{uploadedFiles.length > 1 ? 's' : ''} uploaded — processing now. Add a title and year now, or fill in the rest later.{' '}
