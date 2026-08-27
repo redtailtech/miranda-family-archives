@@ -46,6 +46,7 @@ export function HeartButton({
       onClick={toggle}
       disabled={busy}
       aria-pressed={hearted}
+      aria-label={`${hearted ? 'Remove heart' : 'Heart this item'} — ${count} hearts`}
       className="rounded-xl border px-5 py-3 text-2xl disabled:opacity-50"
     >
       {hearted ? '❤️' : '🤍'} {count}

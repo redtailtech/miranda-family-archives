@@ -11,27 +11,35 @@ export function MediaGrid({ query }: { query?: string } = {}) {
   const [loading, setLoading] = useState(false)
   const [errored, setErrored] = useState(false)
   const sentinel = useRef<HTMLDivElement>(null)
+  // Bumped every time the query changes, so in-flight responses from a
+  // superseded query can be told apart from the current one. A slow page
+  // fetched under the old query must never be appended into the new list.
+  const generation = useRef(0)
 
   const fetchPage = useCallback(
     async (cursorArg: string | null, append: boolean) => {
+      const requestGeneration = generation.current
       setLoading(true)
       try {
         const params = [query, cursorArg ? `cursor=${cursorArg}` : null].filter(Boolean).join('&')
         const res = await fetch(`/api/media${params ? `?${params}` : ''}`)
+        if (requestGeneration !== generation.current) return
         if (!res.ok) {
           setDone(true)
           setErrored(true)
           return
         }
         const data = await res.json()
+        if (requestGeneration !== generation.current) return
         setItems((prev) => (append ? [...prev, ...data.items] : data.items))
         setCursor(data.nextCursor)
         setDone(!data.nextCursor)
       } catch {
+        if (requestGeneration !== generation.current) return
         setDone(true)
         setErrored(true)
       } finally {
-        setLoading(false)
+        if (requestGeneration === generation.current) setLoading(false)
       }
     },
     [query]
@@ -46,6 +54,7 @@ export function MediaGrid({ query }: { query?: string } = {}) {
   // type/decade/album chips). Fetches directly rather than through loadMore
   // so the reset isn't racing stale cursor/done state from the prior query.
   useEffect(() => {
+    generation.current += 1
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting paging state for a new filter query, not synchronizing with an external system
     setItems([])
     setCursor(null)
@@ -65,10 +74,12 @@ export function MediaGrid({ query }: { query?: string } = {}) {
     return () => obs.disconnect()
   }, [loadMore])
 
-  if (done && !errored && items.length === 0)
-    return query?.includes('favorite') ? (
-      <p className="text-xl">Nothing here yet — tap the ❤️ on any photo to save it here.</p>
-    ) : (
+  if (done && !errored && items.length === 0) {
+    if (query?.includes('favorite'))
+      return <p className="text-xl">Nothing here yet — tap the ❤️ on any photo to save it here.</p>
+    if (query)
+      return <p className="text-xl">No matches — try different search or filters.</p>
+    return (
       <p className="text-xl">
         Nothing here yet —{' '}
         <Link href="/upload" className="underline">
@@ -77,6 +88,7 @@ export function MediaGrid({ query }: { query?: string } = {}) {
         .
       </p>
     )
+  }
 
   return (
     <div>

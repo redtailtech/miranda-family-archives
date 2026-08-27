@@ -18,17 +18,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!item) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   await prisma.$transaction(async (tx) => {
-    const existing = await tx.heart.findUnique({
+    await tx.heart.upsert({
       where: { userId_mediaItemId: { userId: user!.id, mediaItemId: id } },
+      create: { userId: user!.id, mediaItemId: id },
+      update: {},
     })
-    if (!existing) {
-      await tx.heart.create({ data: { userId: user!.id, mediaItemId: id } })
-      await tx.favorite.upsert({
-        where: { userId_mediaItemId: { userId: user!.id, mediaItemId: id } },
-        create: { userId: user!.id, mediaItemId: id },
-        update: {},
-      })
-    }
+    await tx.favorite.upsert({
+      where: { userId_mediaItemId: { userId: user!.id, mediaItemId: id } },
+      create: { userId: user!.id, mediaItemId: id },
+      update: {},
+    })
   })
   const heartCount = await prisma.heart.count({ where: { mediaItemId: id } })
   return NextResponse.json({ ok: true, heartCount })

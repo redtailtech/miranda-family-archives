@@ -43,24 +43,40 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } catch {
     return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
   }
-  const items = await prisma.albumItem.findMany({ where: { albumId: id } })
+  const items = await prisma.albumItem.findMany({
+    where: { albumId: id },
+    orderBy: { position: 'asc' },
+    include: { mediaItem: { select: { deletedAt: true } } },
+  })
   if (items.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const current = new Set(items.map((i) => i.mediaItemId))
+  // Clients only ever see live (non-soft-deleted) media, so the reorder
+  // permutation must be validated against the live subset — otherwise an
+  // album with any soft-deleted member can never pass validation again.
+  // Soft-deleted rows keep their relative order, appended after the live ones.
+  const liveItems = items.filter((i) => i.mediaItem.deletedAt === null)
+  const deadItems = items.filter((i) => i.mediaItem.deletedAt !== null)
+  const liveIds = new Set(liveItems.map((i) => i.mediaItemId))
   if (
     !Array.isArray(orderedMediaIds) ||
-    orderedMediaIds.length !== items.length ||
-    new Set(orderedMediaIds).size !== items.length ||
-    !orderedMediaIds.every((m: unknown) => typeof m === 'string' && current.has(m))
+    orderedMediaIds.length !== liveItems.length ||
+    new Set(orderedMediaIds).size !== liveItems.length ||
+    !orderedMediaIds.every((m: unknown) => typeof m === 'string' && liveIds.has(m))
   )
     return NextResponse.json({ error: 'orderedMediaIds must be a permutation of album items' }, { status: 400 })
-  await prisma.$transaction(
-    orderedMediaIds.map((mediaItemId: string, position: number) =>
+  await prisma.$transaction([
+    ...orderedMediaIds.map((mediaItemId: string, position: number) =>
       prisma.albumItem.update({
         where: { albumId_mediaItemId: { albumId: id, mediaItemId } },
         data: { position },
       })
-    )
-  )
+    ),
+    ...deadItems.map((item, index) =>
+      prisma.albumItem.update({
+        where: { albumId_mediaItemId: { albumId: id, mediaItemId: item.mediaItemId } },
+        data: { position: orderedMediaIds.length + index },
+      })
+    ),
+  ])
   await albumItemsChangeWithAudit(id, user!.id, { reordered: true }, items.length, items.length)
   return NextResponse.json({ ok: true })
 }
