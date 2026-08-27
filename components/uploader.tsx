@@ -109,11 +109,29 @@ async function abortUpload(
   }
 }
 
+// backOfId needs to be readable, at request time, by the addUploader
+// callback set up in createUppy (which runs later, asynchronously, outside
+// React) — and settable, at render time, from Uploader below whenever the
+// prop changes. A React ref can't be handed to createUppy: it's called from
+// useState's lazy initializer (i.e. during render), and passing a ref into
+// a function called during render trips the react-hooks/refs lint rule.
+// Assigning a property directly onto the Uppy instance from the component
+// (`uppy.__backOfId = x`) trips react-hooks/immutability, since `uppy` is a
+// useState value. So createUppy instead exposes get/set *methods* on the
+// instance (calling a method isn't "modifying" the state value the way a
+// property assignment is) that close over a plain local variable.
+function getBackOfId(uppy: Uppy<Record<string, unknown>, Record<string, unknown>>): string | undefined {
+  return (uppy as unknown as { __getBackOfId?: () => string | undefined }).__getBackOfId?.()
+}
+
+function setBackOfId(uppy: Uppy<Record<string, unknown>, Record<string, unknown>>, value: string | undefined) {
+  ;(uppy as unknown as { __setBackOfId?: (value: string | undefined) => void }).__setBackOfId?.(value)
+}
+
 async function processFilesWithConcurrency(
   fileIds: string[],
   uppy: Uppy<Record<string, unknown>, Record<string, unknown>>,
   settledMediaIds: Set<string>,
-  backOfId: string | undefined,
 ) {
   const results: Array<{ fileId: string; successful: boolean }> = []
 
@@ -126,6 +144,9 @@ async function processFilesWithConcurrency(
     let uploadId: string | undefined
 
     try {
+      // Read backOfId at request time, not at Uppy-construction time — see
+      // getBackOfId above.
+      const backOfId = getBackOfId(uppy)
       const response = await api('/api/uploads', {
         filename: file.name,
         size: file.size,
@@ -204,11 +225,21 @@ function createUppy(opts: { backOfId?: string; maxFiles?: number } = {}) {
     },
   })
 
+  // currentBackOfId is seeded from the construction-time prop; Uploader's
+  // effect below calls setBackOfId(uppy, ...) to keep it current as the
+  // backOfId prop changes across re-renders (see the getBackOfId/setBackOfId
+  // comment above).
+  let currentBackOfId = opts.backOfId
+  ;(uppy as unknown as Record<string, unknown>).__getBackOfId = () => currentBackOfId
+  ;(uppy as unknown as Record<string, unknown>).__setBackOfId = (value: string | undefined) => {
+    currentBackOfId = value
+  }
+
   // Track both aborted and completed mediaIds to prevent duplicate aborts
   const settledMediaIds = new Set<string>()
 
   uppy.addUploader(async (fileIds) => {
-    return processFilesWithConcurrency(fileIds, uppy, settledMediaIds, opts.backOfId)
+    return processFilesWithConcurrency(fileIds, uppy, settledMediaIds)
   })
 
   // Handle file removal (user cancelled)
@@ -304,8 +335,26 @@ export function Uploader({
   backOfId,
   maxFiles,
   onUploaded,
-}: { backOfId?: string; maxFiles?: number; onUploaded?: () => void } = {}) {
+}: {
+  backOfId?: string
+  // Static at Uppy-construction time (Uppy's restrictions are fixed once the
+  // instance is built) — changing maxFiles on a later render has no effect.
+  maxFiles?: number
+  onUploaded?: () => void
+} = {}) {
   const [uppy] = useState(() => createUppy({ backOfId, maxFiles }))
+  // Uppy is constructed once outside React (createUppy) and the handlers
+  // below are registered once (deps: [uppy] only), so nothing in this
+  // component can safely close over a prop value directly — a re-render with
+  // a different prop would be invisible to code that already captured the
+  // old value. Keep the Uppy instance's backOfId current on every backOfId
+  // change (see getBackOfId/setBackOfId above createUppy), so the POST
+  // /api/uploads body, the duplicate-prompt skip, and the onUploaded gating
+  // all read the CURRENT prop at call time, not whatever it was when
+  // createUppy ran.
+  useEffect(() => {
+    setBackOfId(uppy, backOfId)
+  }, [uppy, backOfId])
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const confirm = useConfirm()
   // Uppy is constructed once outside React (createUppy), and the
@@ -328,7 +377,7 @@ export function Uploader({
       const mediaId = (file?.meta as Record<string, unknown> | undefined)?.mediaId as string | undefined
       if (!mediaId || !file) return
       setUploadedFiles((prev) => (prev.some((f) => f.mediaId === mediaId) ? prev : [...prev, { mediaId, name: file.name ?? mediaId }]))
-      if (backOfId) onUploadedRef.current?.()
+      if (getBackOfId(uppy)) onUploadedRef.current?.()
     }
     uppy.on('upload-success', handleUploadSuccess)
 
@@ -351,7 +400,7 @@ export function Uploader({
       // A back legitimately shares filename/context with its front — skip the
       // duplicate-filename prompt loop for back uploads. The server's
       // content-dupe warning still applies independently.
-      if (backOfId) return
+      if (getBackOfId(uppy)) return
       const names = files.map((f) => f.name).filter((n): n is string => Boolean(n))
       if (names.length === 0) return
       try {
@@ -379,7 +428,7 @@ export function Uploader({
       uppy.off('cancel-all', handleCancelAll)
       uppy.off('files-added', handleFilesAdded)
     }
-  }, [uppy, backOfId])
+  }, [uppy])
 
   return (
     <div>
