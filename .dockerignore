@@ -6,3 +6,5 @@ node_modules
 .claude
 docs
 docker-compose.yml
+.env*
+*.env
