@@ -6,9 +6,11 @@ import Link from 'next/link'
 import type { PersonLite } from '@/lib/people'
 import { PersonAvatar } from '@/components/person-avatar'
 import { PersonPicker } from '@/components/person-picker'
+import { useConfirm } from '@/components/confirm-dialog'
 
 export function PeopleTagger({ mediaId, people }: { mediaId: string; people: PersonLite[] }) {
   const router = useRouter()
+  const confirm = useConfirm()
   const [adding, setAdding] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -37,7 +39,13 @@ export function PeopleTagger({ mediaId, people }: { mediaId: string; people: Per
   }
 
   async function untag(person: PersonLite) {
-    if (!confirm(`Remove ${person.displayName} from this photo?`)) return
+    const ok = await confirm({
+      title: `Remove ${person.displayName}?`,
+      body: "They'll no longer be tagged in this photo.",
+      actionLabel: 'Remove',
+      destructive: true,
+    })
+    if (!ok) return
     setError('')
     setBusyId(person.id)
     try {

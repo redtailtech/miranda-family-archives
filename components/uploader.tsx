@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Uppy from '@uppy/core'
 import Dashboard from '@uppy/react/dashboard'
 import Link from 'next/link'
 import '@uppy/core/css/style.min.css'
 import '@uppy/dashboard/css/style.min.css'
+import { useConfirm } from '@/components/confirm-dialog'
 
 const CHUNK_SIZE = 25 * 1024 * 1024
 const MAX_CONCURRENT_FILES = 3
@@ -299,6 +300,16 @@ function UploadDetailRow({ mediaId, name }: UploadedFile) {
 export function Uploader() {
   const [uppy] = useState(createUppy)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const confirm = useConfirm()
+  // Uppy is constructed once outside React (createUppy), and the
+  // 'files-added' handler below is registered in this effect (deps: [uppy]
+  // only), so it closes over whatever `confirm` was at mount time. Thread
+  // the latest confirm fn through a ref so the handler always calls the
+  // current one without needing to re-register on every render.
+  const confirmRef = useRef(confirm)
+  useEffect(() => {
+    confirmRef.current = confirm
+  }, [confirm])
 
   useEffect(() => {
     const handleUploadSuccess = (file: ReturnType<typeof uppy.getFile> | undefined) => {
@@ -331,7 +342,12 @@ export function Uploader() {
         const dupNames = new Set<string>(duplicates)
         for (const file of files) {
           if (!file.name || !dupNames.has(file.name)) continue
-          const keep = confirm(`A file called "${file.name}" is already in the archive. Upload it anyway?`)
+          const keep = await confirmRef.current({
+            title: `Upload "${file.name}" again?`,
+            body: 'A file with this name is already in the archive.',
+            actionLabel: 'Upload anyway',
+            cancelLabel: 'Skip this file',
+          })
           if (!keep) uppy.removeFile(file.id)
         }
       } catch (err) {

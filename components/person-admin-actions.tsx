@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useConfirm } from '@/components/confirm-dialog'
 
 /**
  * Person variant of AdminItemActions — same delete/restore idiom, pointed at
@@ -10,12 +11,20 @@ import { useRouter } from 'next/navigation'
  */
 export function PersonAdminActions({ id, deleted }: { id: string; deleted: boolean }) {
   const router = useRouter()
+  const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   async function act(method: 'DELETE' | 'restore') {
-    if (method === 'DELETE' && !confirm('Move this person to Deleted people? An admin can restore them later.'))
-      return
+    if (method === 'DELETE') {
+      const ok = await confirm({
+        title: 'Delete this person?',
+        body: 'Move this person to Deleted people? An admin can restore them later.',
+        actionLabel: 'Delete',
+        destructive: true,
+      })
+      if (!ok) return
+    }
     setBusy(true)
     try {
       const res = await fetch(method === 'DELETE' ? `/api/people/${id}` : `/api/people/${id}/restore`, {

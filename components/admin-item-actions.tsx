@@ -2,14 +2,24 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useConfirm } from '@/components/confirm-dialog'
 
 export function AdminItemActions({ id, deleted }: { id: string; deleted: boolean }) {
   const router = useRouter()
+  const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   async function act(method: 'DELETE' | 'restore') {
-    if (method === 'DELETE' && !confirm('Move this item to Deleted items? An admin can restore it later.')) return
+    if (method === 'DELETE') {
+      const ok = await confirm({
+        title: 'Delete this item?',
+        body: 'Move this item to Deleted items? An admin can restore it later.',
+        actionLabel: 'Delete',
+        destructive: true,
+      })
+      if (!ok) return
+    }
     setBusy(true)
     try {
       const res = await fetch(method === 'DELETE' ? `/api/media/${id}` : `/api/media/${id}/restore`, {

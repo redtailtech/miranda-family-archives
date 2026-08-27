@@ -22,6 +22,7 @@ import { CSS } from '@dnd-kit/utilities'
 import type { AlbumDTO } from '@/lib/albums'
 import type { MediaItemDTO } from '@/lib/media'
 import { AlbumForm } from '@/components/album-form'
+import { useConfirm } from '@/components/confirm-dialog'
 
 function AlbumItemTile({
   item,
@@ -229,6 +230,7 @@ function AddPhotosModal({
 
 export function AlbumDetail({ album, items }: { album: AlbumDTO; items: MediaItemDTO[] }) {
   const router = useRouter()
+  const confirm = useConfirm()
   const [orderedItems, setOrderedItems] = useState(items)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [editingHeader, setEditingHeader] = useState(false)
@@ -315,7 +317,13 @@ export function AlbumDetail({ album, items }: { album: AlbumDTO; items: MediaIte
   }
 
   async function deleteAlbum() {
-    if (!confirm(`Delete "${album.name}"? This can't be undone.`)) return
+    const ok = await confirm({
+      title: `Delete "${album.name}"?`,
+      body: "This can't be undone.",
+      actionLabel: 'Delete',
+      destructive: true,
+    })
+    if (!ok) return
     try {
       const res = await fetch(`/api/albums/${album.id}`, { method: 'DELETE' })
       if (res.ok) router.push('/albums')

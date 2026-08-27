@@ -6,6 +6,7 @@ import Link from 'next/link'
 import type { PersonDTO, PersonLite } from '@/lib/people'
 import { PersonAvatar } from '@/components/person-avatar'
 import { PersonPicker } from '@/components/person-picker'
+import { useConfirm } from '@/components/confirm-dialog'
 
 type RelationKind = 'parents' | 'spouses'
 
@@ -16,6 +17,7 @@ const CONFIG: Record<RelationKind, { path: string; bodyKey: string; queryKey: st
 
 export function PersonRelations({ person }: { person: PersonDTO }) {
   const router = useRouter()
+  const confirm = useConfirm()
   const [adding, setAdding] = useState<RelationKind | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -53,7 +55,12 @@ export function PersonRelations({ person }: { person: PersonDTO }) {
 
   async function removeRelation(kind: RelationKind, other: PersonLite) {
     const { path, queryKey, label } = CONFIG[kind]
-    if (!confirm(`Remove ${other.displayName} as ${person.displayName}'s ${label}?`)) return
+    const ok = await confirm({
+      title: `Remove ${other.displayName} as ${person.displayName}'s ${label}?`,
+      actionLabel: 'Remove',
+      destructive: true,
+    })
+    if (!ok) return
     setError('')
     setBusyId(other.id)
     try {
