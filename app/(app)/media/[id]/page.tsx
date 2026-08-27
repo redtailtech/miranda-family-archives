@@ -6,6 +6,7 @@ import { mediaItemToDTO } from '@/lib/media'
 import { RetryButton } from '@/components/retry-button'
 import { DetailTabs } from '@/components/detail-tabs'
 import { MediaEditForm } from '@/components/media-edit-form'
+import { PeopleTagger } from '@/components/people-tagger'
 import { ExifTable } from '@/components/exif-table'
 import { HistoryList } from '@/components/history-list'
 import { AdminItemActions } from '@/components/admin-item-actions'
@@ -22,6 +23,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
       uploadedBy: true,
       _count: { select: { hearts: true } },
       hearts: viewer ? { where: { userId: viewer.id } } : false,
+      people: { include: { person: true } },
     },
   })
   if (!item) notFound()
@@ -72,6 +74,9 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
               <dt className="font-semibold">Uploaded</dt><dd>{new Date(dto.createdAt).toLocaleDateString()}</dd>
               <dt className="font-semibold">File</dt><dd>{dto.originalFilename} ({dto.mimeType})</dd>
             </dl>
+            <div className="mt-8">
+              <PeopleTagger mediaId={dto.id} people={dto.people ?? []} />
+            </div>
             <div className="mt-8">
               <MediaEditForm item={dto} />
             </div>

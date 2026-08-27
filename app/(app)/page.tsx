@@ -19,15 +19,21 @@ export default async function LibraryPage({
   const type = first(sp.type)
   const decade = first(sp.decade)
   const albumId = first(sp.albumId)
+  const personId = first(sp.personId)
   const view = first(sp.view)
 
-  const [yearRows, albums] = await Promise.all([
+  const [yearRows, albums, people] = await Promise.all([
     prisma.mediaItem.findMany({
       where: { deletedAt: null, dateYear: { not: null } },
       distinct: ['dateYear'],
       select: { dateYear: true },
     }),
     prisma.album.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    prisma.person.findMany({
+      where: { deletedAt: null },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: 'asc' },
+    }),
   ])
 
   const decades = Array.from(
@@ -42,12 +48,13 @@ export default async function LibraryPage({
   if (type) queryParams.set('type', type)
   if (decade) queryParams.set('decade', decade)
   if (albumId) queryParams.set('albumId', albumId)
+  if (personId) queryParams.set('personId', personId)
   const query = queryParams.toString()
 
   return (
     <div>
       <h1 className="mb-6 text-3xl font-bold">Library</h1>
-      <LibraryControls decades={decades} albums={albums} />
+      <LibraryControls decades={decades} albums={albums} people={people} />
       {view === 'timeline' ? <TimelineView /> : <MediaGrid query={query} />}
     </div>
   )

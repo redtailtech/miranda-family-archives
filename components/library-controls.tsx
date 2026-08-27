@@ -4,14 +4,24 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 type Album = { id: string; name: string }
+type PersonChip = { id: string; displayName: string }
 
-export function LibraryControls({ decades, albums }: { decades: number[]; albums: Album[] }) {
+export function LibraryControls({
+  decades,
+  albums,
+  people,
+}: {
+  decades: number[]
+  albums: Album[]
+  people: PersonChip[]
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
   const type = searchParams.get('type')
   const decade = searchParams.get('decade')
   const albumId = searchParams.get('albumId')
+  const personId = searchParams.get('personId')
   const view = searchParams.get('view')
 
   const [q, setQ] = useState(searchParams.get('q') ?? '')
@@ -85,6 +95,19 @@ export function LibraryControls({ decades, albums }: { decades: number[]; albums
           {albums.map((a) => (
             <Chip key={a.id} active={albumId === a.id} onClick={() => updateParams({ albumId: a.id })}>
               {a.name}
+            </Chip>
+          ))}
+        </div>
+      )}
+
+      {people.length > 0 && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by person">
+          <Chip active={!personId} onClick={() => updateParams({ personId: null })}>
+            Everyone
+          </Chip>
+          {people.map((p) => (
+            <Chip key={p.id} active={personId === p.id} onClick={() => updateParams({ personId: p.id })}>
+              {p.displayName}
             </Chip>
           ))}
         </div>

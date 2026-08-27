@@ -8,6 +8,7 @@ import { PersonAvatarControls } from '@/components/person-avatar-controls'
 import { PersonForm } from '@/components/person-form'
 import { PersonRelations } from '@/components/person-relations'
 import { PersonAdminActions } from '@/components/person-admin-actions'
+import { MediaGrid } from '@/components/media-grid'
 
 export default async function PersonProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -53,6 +54,13 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
       </div>
 
       <PersonRelations person={person} />
+
+      {person.tagCount > 0 && (
+        <div className="mt-10">
+          <h2 className="mb-4 text-2xl font-bold">Photos of {person.displayName}</h2>
+          <MediaGrid query={`personId=${person.id}`} />
+        </div>
+      )}
     </div>
   )
 }

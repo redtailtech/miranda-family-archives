@@ -552,6 +552,69 @@ export async function removeSpouseWithAudit(
   })
 }
 
+async function currentMediaTagNames(tx: Prisma.TransactionClient, mediaId: string): Promise<string[]> {
+  const rows = await tx.mediaPerson.findMany({
+    where: { mediaItemId: mediaId, person: { deletedAt: null } },
+    include: { person: true },
+  })
+  return rows.map((r) => r.person.displayName).sort()
+}
+
+/**
+ * Tags or untags a single person on a media item. Exactly one of
+ * `addPersonId`/`removePersonId` must be set. Duplicate add and missing
+ * remove are rejected as thrown `{status}` errors (409/404 respectively) —
+ * same status-tagged-throw convention as the rest of this file, mapped to a
+ * response by `safeErrorResponse`. The MediaPerson mutation and its audit
+ * row (on the MEDIA item, `entityType: 'media_item'`) are written in one
+ * transaction, mirroring `addParentWithAudit`'s before/after-names shape.
+ */
+export async function setMediaPeopleWithAudit(
+  mediaId: string,
+  actorUserId: string,
+  change: { addPersonId?: string; removePersonId?: string }
+): Promise<void> {
+  const { addPersonId, removePersonId } = change
+  if ((addPersonId && removePersonId) || (!addPersonId && !removePersonId))
+    throw Object.assign(new Error('exactly one of addPersonId or removePersonId is required'), { status: 400 })
+  const personId = addPersonId ?? removePersonId!
+
+  const media = await prisma.mediaItem.findFirst({
+    where: { id: mediaId, deletedAt: null, status: { in: ['READY', 'PROCESSING'] } },
+  })
+  if (!media) throw Object.assign(new Error('media not found'), { status: 404 })
+
+  const person = await prisma.person.findFirst({ where: { id: personId, deletedAt: null } })
+  if (!person) throw Object.assign(new Error('person not found'), { status: 404 })
+
+  const existing = await prisma.mediaPerson.findUnique({
+    where: { mediaItemId_personId: { mediaItemId: mediaId, personId } },
+  })
+  if (addPersonId && existing)
+    throw Object.assign(new Error('that person is already tagged in this photo'), { status: 409 })
+  if (removePersonId && !existing)
+    throw Object.assign(new Error('that person is not tagged in this photo'), { status: 404 })
+
+  await prisma.$transaction(async (tx) => {
+    const beforeNames = await currentMediaTagNames(tx, mediaId)
+    if (addPersonId) {
+      await tx.mediaPerson.create({ data: { mediaItemId: mediaId, personId } })
+    } else {
+      await tx.mediaPerson.delete({ where: { mediaItemId_personId: { mediaItemId: mediaId, personId } } })
+    }
+    const afterNames = await currentMediaTagNames(tx, mediaId)
+    await tx.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'media_item',
+        entityId: mediaId,
+        action: 'UPDATE',
+        changes: { people: { from: beforeNames, to: afterNames } } as Prisma.InputJsonValue,
+      },
+    })
+  })
+}
+
 export async function albumItemsChangeWithAudit(
   albumId: string,
   actorUserId: string,

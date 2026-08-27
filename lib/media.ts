@@ -1,5 +1,6 @@
-import type { MediaItem, User } from '@prisma/client'
+import type { MediaItem, MediaPerson, Person, User } from '@prisma/client'
 import { signGetUrl } from '@/lib/s3'
+import { personToLite, type PersonLite } from '@/lib/people'
 
 export const ACCEPTED_MIMES = [
   'image/tiff',
@@ -51,12 +52,14 @@ export type MediaItemDTO = {
   inlineUrl?: string | null
   heartCount: number
   heartedByMe: boolean
+  people?: PersonLite[]
 }
 
 export type MediaItemWithSocial = MediaItem & {
   uploadedBy?: User | null
   _count?: { hearts: number }
   hearts?: { userId: string }[]
+  people?: (MediaPerson & { person: Person })[]
 }
 
 export async function mediaItemToDTO(
@@ -90,6 +93,10 @@ export async function mediaItemToDTO(
     dto.exif = (item.exif as Record<string, unknown> | null) ?? null
     if (item.type === 'DOCUMENT' && item.status === 'READY')
       dto.inlineUrl = await signGetUrl(item.originalKey, { expiresIn: 3600 })
+    if (item.people) {
+      const tagged = item.people.filter((mp) => mp.person.deletedAt === null)
+      dto.people = await Promise.all(tagged.map((mp) => personToLite(mp.person)))
+    }
   }
   return dto
 }
