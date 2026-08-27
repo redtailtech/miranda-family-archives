@@ -47,6 +47,7 @@ export type MediaItemDTO = {
   thumbUrl: string | null
   webUrl?: string | null
   largeUrl?: string | null
+  exif?: Record<string, unknown> | null
 }
 
 export async function mediaItemToDTO(
@@ -75,6 +76,7 @@ export async function mediaItemToDTO(
   if (opts.detail) {
     dto.webUrl = item.webKey ? await signGetUrl(item.webKey) : null
     dto.largeUrl = item.largeKey ? await signGetUrl(item.largeKey) : null
+    dto.exif = (item.exif as Record<string, unknown> | null) ?? null
   }
   return dto
 }

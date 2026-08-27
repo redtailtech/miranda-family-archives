@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { mediaItemToDTO } from '@/lib/media'
+import { updateMediaWithAudit, softDeleteMediaWithAudit, validDateParts, EDITABLE_MEDIA_FIELDS } from '@/lib/audit'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth()
@@ -13,4 +14,44 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   })
   if (!item) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(await mediaItemToDTO(item, { detail: true }))
+}
+
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await auth()
+  if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const user = await prisma.user.findUnique({ where: { clerkId: userId } })
+  if (!user) return NextResponse.json({ error: 'no user record' }, { status: 403 })
+  const { id } = await params
+  const body = await req.json()
+
+  const unknown = Object.keys(body).filter((k) => !(EDITABLE_MEDIA_FIELDS as readonly string[]).includes(k))
+  if (unknown.length > 0)
+    return NextResponse.json({ error: `unknown fields: ${unknown.join(', ')}` }, { status: 400 })
+
+  const current = await prisma.mediaItem.findFirst({ where: { id, deletedAt: null } })
+  if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const year = 'dateYear' in body ? body.dateYear : current.dateYear
+  const month = 'dateMonth' in body ? body.dateMonth : current.dateMonth
+  const day = 'dateDay' in body ? body.dateDay : current.dateDay
+  if (!validDateParts(year, month, day))
+    return NextResponse.json({ error: 'invalid date: a day needs a month, a month needs a year' }, { status: 400 })
+
+  const { changed } = await updateMediaWithAudit(id, user.id, body)
+  return NextResponse.json({ ok: true, changed })
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await auth()
+  if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const user = await prisma.user.findUnique({ where: { clerkId: userId } })
+  if (!user) return NextResponse.json({ error: 'no user record' }, { status: 403 })
+  if (user.role !== 'ADMIN') return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const { id } = await params
+  try {
+    await softDeleteMediaWithAudit(id, user.id)
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500
+    return NextResponse.json({ error: 'not found' }, { status })
+  }
+  return NextResponse.json({ ok: true })
 }
