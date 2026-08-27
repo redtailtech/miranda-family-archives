@@ -107,7 +107,27 @@
 
 ---
 
-### Task 5: Deploy + digest E2E + final acceptance
+### Task 5: Duplicate detection (added by user direction 2026-08-27 — warn, never block)
+
+**Files:**
+- Modify: `prisma/schema.prisma` (MediaItem + `contentHash String?` with `@@index([contentHash])`, `perceptualHash String?`, `duplicateOfId String?`) + migration, `worker/process-media.ts` (hashing + duplicate matching), `lib/media.ts` (DTO fields), `components/uploader.tsx` (filename pre-check prompts), `app/(app)/media/[id]/page.tsx` (duplicate notice), `components/media-grid.tsx` (small badge)
+- Create: `app/api/uploads/check/route.ts`, `lib/dupes.ts` (dHash + hamming, pure)
+
+**Interfaces:**
+- Consumes: worker streaming pipeline, sharp, existing uploader flow, `requireUser`.
+- Produces:
+  - Migration `add_duplicate_detection` (first schema change since init — verify `npx prisma migrate dev` locally; production applies via the existing pre-deploy `migrate deploy`).
+  - `lib/dupes.ts`: `dHash(raw72: Buffer): string` (9×8 grayscale raw → 64-bit hex: per row, bit = pixel[x] > pixel[x+1]) and `hammingHex(a: string, b: string): number`.
+  - Worker (inside `processMedia`, after derivatives succeed): SHA-256 of the original file (stream `createReadStream` → `crypto.createHash('sha256')`); for PHOTOs additionally `sharp(sourceImagePath).grayscale().resize(9, 8, {fit: 'fill'}).raw().toBuffer()` → `dHash`. Matching: exact = another non-deleted MediaItem (id ≠ self) with equal `contentHash`; near (PHOTO only) = fetch all non-deleted photos' `{id, perceptualHash}` and take the first with `hammingHex ≤ 6`. Set `duplicateOfId` to the match (exact wins over near) or null. Persist all three fields in the final READY update. Re-processing recomputes idempotently.
+  - `POST /api/uploads/check` `{filenames: string[]}` → `{duplicates: string[]}` — case-insensitive `originalFilename` matches among non-deleted items; member auth; array validated (≤100 strings).
+  - Uploader: when files are added (before any upload starts), batch-call check; for each duplicate name show `confirm('A file called "X" is already in the archive. Upload it anyway?')` — decline → `uppy.removeFile` (warn-don't-block; server never rejects).
+  - DTO: `duplicateOfId: string | null` on list + detail; detail additionally `duplicateOf: {id, title: string|null, filename: string, thumbUrl: string|null} | null` populated ONLY when the target still exists non-deleted.
+  - Detail page: when `duplicateOf` present, a soft notice card above the tabs: "This might be a duplicate of *{title/filename}*" with thumb + link ("It's okay to keep both — an admin can delete one from its page."). Grid: small `2×` corner badge when `duplicateOfId` set.
+- [ ] Steps: migration → lib/dupes.ts → worker changes → check route + uploader prompt → DTO/UI. Module verification (local docker Postgres + bucket): process the same small JPEG twice via the established harness → second item gets `duplicateOfId` = first (exact); process a slightly-recompressed variant (sharp re-encode quality 60) → near-match via dHash ≤ 6; a different image → no match; PDF → contentHash set, no perceptual/near path; check-route logic exercised directly (dup + non-dup filenames); cleanup everything. `tsc`/`lint`/`build`. Commit `feat: duplicate detection — filename prompts and content fingerprints`.
+
+---
+
+### Task 6: Deploy + digest E2E + final acceptance
 
 - [ ] Full gate; push (authorized); both Railway deployments SUCCESS; worker logs show the digest schedule registered.
 - [ ] **Digest E2E:** confirm recent real activity exists (the family's uploads/edits within 24h — or make one small titled edit); controller/implementer triggers `runDailyDigest({force: true})` against production (one-off: `railway run --service worker npx tsx worker/send-digest.ts --run --force` or temporarily via local run with prod DATABASE_URL + key — choose the cleanest, document it); user confirms the email arrived, looks right on phone, thumbnails render, links work, and the Settings toggle stops the next one (flip off → force again → no email to them).
