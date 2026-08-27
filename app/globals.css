@@ -67,7 +67,7 @@
   --color-white: #fffdf9;
   --color-red-700: #9c2f1e; /* warm brick — error text (6.9:1 on paper) */
   --color-red-100: #f6e0d6;
-  --color-green-600: #4a7c33; /* leaf green — switch "on" */
+  --color-green-600: #4a7c33; /* leaf green — unused since shadcn Switch conversion (on-state is bg-primary); retained for future use */
   --color-green-700: #3d6b2a; /* success text (5.8:1 on paper) */
 }
 
