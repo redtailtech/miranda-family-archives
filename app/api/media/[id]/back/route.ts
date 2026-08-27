@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/require-user'
 
@@ -47,27 +48,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (back.backItem && back.backItem.deletedAt === null)
     return NextResponse.json({ error: 'that photo already has a back of its own' }, { status: 409 })
 
-  await prisma.$transaction([
-    prisma.mediaItem.update({ where: { id: backItemId }, data: { backOfId: id } }),
-    prisma.auditLog.create({
-      data: {
-        userId: user!.id,
-        entityType: 'media_item',
-        entityId: id,
-        action: 'UPDATE',
-        changes: { back: { from: null, to: back.originalFilename } },
-      },
-    }),
-    prisma.auditLog.create({
-      data: {
-        userId: user!.id,
-        entityType: 'media_item',
-        entityId: backItemId,
-        action: 'UPDATE',
-        changes: { backOf: { from: null, to: id } },
-      },
-    }),
-  ])
+  try {
+    await prisma.$transaction([
+      prisma.mediaItem.update({ where: { id: backItemId }, data: { backOfId: id } }),
+      prisma.auditLog.create({
+        data: {
+          userId: user!.id,
+          entityType: 'media_item',
+          entityId: id,
+          action: 'UPDATE',
+          changes: { back: { from: null, to: back.originalFilename } },
+        },
+      }),
+      prisma.auditLog.create({
+        data: {
+          userId: user!.id,
+          entityType: 'media_item',
+          entityId: backItemId,
+          action: 'UPDATE',
+          changes: { backOf: { from: null, to: front.originalFilename } },
+        },
+      }),
+    ])
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')
+      return NextResponse.json({ error: 'that photo already has a back' }, { status: 409 })
+    throw err
+  }
 
   return NextResponse.json({ ok: true })
 }
@@ -79,6 +86,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const back = await prisma.mediaItem.findFirst({ where: { backOfId: id, deletedAt: null } })
   if (!back) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const front = await prisma.mediaItem.findUnique({ where: { id }, select: { originalFilename: true } })
 
   await prisma.$transaction([
     prisma.mediaItem.update({ where: { id: back.id }, data: { backOfId: null } }),
@@ -97,7 +105,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
         entityType: 'media_item',
         entityId: back.id,
         action: 'UPDATE',
-        changes: { backOf: { from: id, to: null } },
+        changes: { backOf: { from: front?.originalFilename ?? null, to: null } },
       },
     }),
   ])

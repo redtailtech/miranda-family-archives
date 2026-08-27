@@ -34,6 +34,20 @@ export async function POST(req: NextRequest) {
 
   await completeMultipart(key, uploadId, parts)
 
+  // Digest note: 'backOf' is deliberately not in MEDIA_DIGEST_FIELDS
+  // (lib/digest.ts), so this second UPDATE row never surfaces as a
+  // digest-worthy edit on the back item itself — collectDigestEvents groups
+  // audit rows per entity and skips a group that has no CREATE and no
+  // digest-listed field in its UPDATE rows. Traced this before adding the row.
+  let frontFilename: string | null = null
+  if (item.backOfId) {
+    const front = await prisma.mediaItem.findUnique({
+      where: { id: item.backOfId },
+      select: { originalFilename: true },
+    })
+    frontFilename = front?.originalFilename ?? null
+  }
+
   await prisma.$transaction([
     prisma.mediaItem.update({ where: { id: mediaId }, data: { status: 'PROCESSING' } }),
     prisma.auditLog.create({
@@ -53,6 +67,19 @@ export async function POST(req: NextRequest) {
             changes: { filename: { from: null, to: item.originalFilename } },
           },
     }),
+    ...(item.backOfId
+      ? [
+          prisma.auditLog.create({
+            data: {
+              userId: user.id,
+              entityType: 'media_item',
+              entityId: mediaId,
+              action: 'UPDATE',
+              changes: { backOf: { from: null, to: frontFilename } },
+            },
+          }),
+        ]
+      : []),
   ])
   await enqueueProcessMedia(mediaId)
   return NextResponse.json({ ok: true })
