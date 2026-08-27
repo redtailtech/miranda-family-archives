@@ -10,6 +10,13 @@ const THUMB_EXPIRES_IN = 518400
 // one of the form-editable MediaItem fields (it's tagging, via
 // setMediaPeopleWithAudit) but it IS something the family wants to hear
 // about, so it's added on top of EDITABLE_MEDIA_FIELDS.
+//
+// `location` and `dateIsApproximate` (pulled in via EDITABLE_MEDIA_FIELDS)
+// deliberately stay in scope even though spec §8's illustrative list of
+// digest-worthy edits doesn't name them individually — per controller
+// ruling, that list is shorthand rather than an exhaustive enumeration, and
+// both are substantive metadata edits in the spec's intent. Deliberate
+// inclusion, not an oversight.
 const MEDIA_DIGEST_FIELDS: readonly string[] = [...EDITABLE_MEDIA_FIELDS, 'people']
 // Person relationship changes (parents/spouses) and avatarKey are
 // deliberately NOT digest-worthy — only EDITABLE_PERSON_FIELDS counts.

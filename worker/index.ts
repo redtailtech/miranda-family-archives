@@ -73,8 +73,13 @@ async function main() {
     }
   )
   await boss.work(QUEUE_DAILY_DIGEST, { batchSize: 1 }, async () => {
-    const r = await runDailyDigest()
-    console.log('digest:', r)
+    try {
+      const r = await runDailyDigest()
+      console.log('digest:', r)
+    } catch (err) {
+      console.error('digest failed:', err)
+      throw err // let pg-boss record the failure
+    }
   })
   console.log('worker listening on', QUEUE_PROCESS_MEDIA, QUEUE_DAILY_DIGEST)
 

@@ -161,12 +161,63 @@ function isEmptyDigest(events: DigestEvents): boolean {
 }
 
 /**
+ * Resolves the lookback cutoff for `collectDigestEvents`, anchored to the
+ * previous digest run rather than a flat now-24h: the most recent DigestLog
+ * row strictly before `today` (quiet days create lock rows too, so this
+ * naturally covers a delayed retry, a DST 23/25h day, or a missed day
+ * without losing or double-counting activity). Falls back to now-24h when
+ * there's no prior DigestLog row at all (e.g. the very first run).
+ */
+export async function resolveDigestSince(today: Date): Promise<Date> {
+  const previousLog = await prisma.digestLog.findFirst({
+    where: { date: { lt: today } },
+    orderBy: { date: 'desc' },
+  })
+  return previousLog ? previousLog.createdAt : new Date(Date.now() - 24 * 60 * 60 * 1000)
+}
+
+type EmailClient = { emails: { send: Resend['emails']['send'] } }
+
+/**
+ * Sends one email per recipient, isolating failures per-recipient so one
+ * bad address (or a transient provider error) doesn't block the rest.
+ * Exported so it can be driven directly in verification with a fake
+ * `EmailClient` — no real network call or API key required.
+ */
+export async function sendDigestBatch(
+  client: EmailClient,
+  recipients: { email: string; name: string }[],
+  subject: string,
+  html: string
+): Promise<{ successes: string[]; failures: { email: string; error: unknown }[] }> {
+  const successes: string[] = []
+  const failures: { email: string; error: unknown }[] = []
+  for (const recipient of recipients) {
+    try {
+      const { error } = await client.emails.send({ from: SENDER, to: recipient.email, subject, html })
+      if (error) throw new Error(error.message)
+      successes.push(recipient.email)
+    } catch (err) {
+      failures.push({ email: recipient.email, error: err })
+    }
+  }
+  return { successes, failures }
+}
+
+/**
  * Runs the daily digest: date-locks first (via a unique DigestLog row for
  * "today" in America/New_York), then collects and sends. A quiet day (no
- * events) still "counts" as handled — the lock stays. A send failure deletes
- * the lock so the next invocation can retry.
+ * events) still "counts" as handled — the lock stays. A total send failure
+ * (every recipient failed, or the failure happened before any send was
+ * attempted — e.g. a missing API key) deletes the lock so the next
+ * invocation can retry. A PARTIAL failure (at least one recipient
+ * succeeded) does NOT delete the lock — today's digest is considered sent,
+ * `sentCount` reflects the successes, and the failed recipients simply miss
+ * this one digest (acceptable; they'll get the next one).
  */
-export async function runDailyDigest(opts: { force?: boolean } = {}): Promise<{ sent: number; skipped: string | null }> {
+export async function runDailyDigest(
+  opts: { force?: boolean; emailClient?: EmailClient } = {}
+): Promise<{ sent: number; skipped: string | null }> {
   const today = todayInNewYork()
 
   try {
@@ -178,7 +229,7 @@ export async function runDailyDigest(opts: { force?: boolean } = {}): Promise<{ 
     // force=true: proceed even though today's lock row already exists.
   }
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const since = await resolveDigestSince(today)
   const events = await collectDigestEvents(since)
 
   if (isEmptyDigest(events)) {
@@ -194,33 +245,42 @@ export async function runDailyDigest(opts: { force?: boolean } = {}): Promise<{ 
 
     // Constructed lazily, inside the try, so a missing key fails AFTER the
     // lock is created (and is caught below, which deletes it for retry).
-    const apiKey = process.env.RESEND_API_KEY
-    if (!apiKey) {
-      throw Object.assign(new Error('digest send failed: RESEND_API_KEY is not set'), { tag: 'digest-send-config' })
-    }
-    const resend = new Resend(apiKey)
-
-    let sent = 0
-    for (const recipient of recipients) {
-      const { error } = await resend.emails.send({
-        from: SENDER,
-        to: recipient.email,
-        subject,
-        html,
-      })
-      if (error) {
-        throw Object.assign(new Error(`digest send failed for ${recipient.email}: ${error.message}`), {
-          tag: 'digest-send-failure',
-        })
+    // `opts.emailClient` lets verification substitute a fake client without
+    // a real API key or network call; production always builds a real one.
+    let client: EmailClient
+    if (opts.emailClient) {
+      client = opts.emailClient
+    } else {
+      const apiKey = process.env.RESEND_API_KEY
+      if (!apiKey) {
+        throw Object.assign(new Error('digest send failed: RESEND_API_KEY is not set'), { tag: 'digest-send-config' })
       }
-      sent++
+      client = new Resend(apiKey)
     }
 
-    await prisma.digestLog.update({ where: { date: today }, data: { sentCount: sent } })
-    return { sent, skipped: null }
+    const { successes, failures } = await sendDigestBatch(client, recipients, subject, html)
+
+    if (successes.length === 0 && failures.length > 0) {
+      // Every recipient failed: treat this the same as a pre-send failure —
+      // delete the lock and rethrow so the whole digest can be retried.
+      const last = failures[failures.length - 1]
+      throw Object.assign(
+        new Error(`digest send failed for all ${failures.length} recipient(s); last error: ${String(last.error)}`),
+        { tag: 'digest-send-failure' }
+      )
+    }
+
+    for (const failure of failures) {
+      console.error(`digest send failed for ${failure.email}:`, failure.error)
+    }
+
+    await prisma.digestLog.update({ where: { date: today }, data: { sentCount: successes.length } })
+    return { sent: successes.length, skipped: null }
   } catch (err) {
-    // Send failed part-way (or before it even started, e.g. missing API
-    // key): delete today's lock so the next run can retry from scratch.
+    // Total failure — either every recipient failed above, or something
+    // failed before any send was attempted (e.g. missing RESEND_API_KEY):
+    // delete today's lock so the next run can retry from scratch. A partial
+    // failure never reaches here (see the all-failed branch above).
     await prisma.digestLog.deleteMany({ where: { date: today } })
     throw err
   }
