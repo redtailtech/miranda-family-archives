@@ -12,9 +12,6 @@ const MAX_CONCURRENT_FILES = 3
 const MAX_RETRIES = 3
 const RETRY_DELAYS = [1000, 3000] // ms delays between retries
 
-// Track already-aborted uploads to prevent double-abort
-const abortedMediaIds = new Set<string>()
-
 class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message)
@@ -97,11 +94,12 @@ async function abortUpload(
   mediaId: string | undefined,
   key: string | undefined,
   uploadId: string | undefined,
+  settledMediaIds: Set<string>,
 ) {
   if (!mediaId || !key || !uploadId) return
-  // Guard against double-abort
-  if (abortedMediaIds.has(mediaId)) return
-  abortedMediaIds.add(mediaId)
+  // Guard against double-abort (already aborted or completed)
+  if (settledMediaIds.has(mediaId)) return
+  settledMediaIds.add(mediaId)
   try {
     await api('/api/uploads/abort', { mediaId, key, uploadId })
   } catch (err) {
@@ -113,6 +111,7 @@ async function abortUpload(
 async function processFilesWithConcurrency(
   fileIds: string[],
   uppy: Uppy<Record<string, unknown>, Record<string, unknown>>,
+  settledMediaIds: Set<string>,
 ) {
   const results: Array<{ fileId: string; successful: boolean }> = []
 
@@ -164,6 +163,8 @@ async function processFilesWithConcurrency(
       }
 
       await api('/api/uploads/complete', { mediaId, key, uploadId, parts })
+      // Mark as settled so abort handlers won't try to abort a completed upload
+      if (mediaId) settledMediaIds.add(mediaId)
       uppy.emit('upload-success', file, { status: 200 })
       results.push({ fileId, successful: true })
     } catch (err) {
@@ -171,7 +172,7 @@ async function processFilesWithConcurrency(
       uppy.emit('upload-error', file, { name: 'UploadError', message: error.message })
       results.push({ fileId, successful: false })
       // Abort upload on backend
-      await abortUpload(mediaId, key, uploadId)
+      await abortUpload(mediaId, key, uploadId, settledMediaIds)
     }
   }
 
@@ -197,8 +198,11 @@ function createUppy() {
     },
   })
 
+  // Track both aborted and completed mediaIds to prevent duplicate aborts
+  const settledMediaIds = new Set<string>()
+
   uppy.addUploader(async (fileIds) => {
-    return processFilesWithConcurrency(fileIds, uppy)
+    return processFilesWithConcurrency(fileIds, uppy, settledMediaIds)
   })
 
   // Handle file removal (user cancelled)
@@ -206,8 +210,11 @@ function createUppy() {
     const mediaId = (file.meta as Record<string, unknown>)?.mediaId as string | undefined
     const key = (file.meta as Record<string, unknown>)?.key as string | undefined
     const uploadId = (file.meta as Record<string, unknown>)?.uploadId as string | undefined
-    abortUpload(mediaId, key, uploadId)
+    abortUpload(mediaId, key, uploadId, settledMediaIds)
   })
+
+  // Store for use in cancel-all handler (attached in useEffect)
+  ;(uppy as unknown as Record<string, unknown>).__settledMediaIds = settledMediaIds
 
   return uppy
 }
@@ -225,11 +232,12 @@ export function Uploader() {
 
     // Handle cancel-all event to abort pending uploads
     const handleCancelAll = () => {
+      const settledMediaIds = (uppy as unknown as Record<string, unknown>).__settledMediaIds as Set<string>
       uppy.getFiles().forEach((file) => {
         const mediaId = (file.meta as Record<string, unknown>)?.mediaId as string | undefined
         const key = (file.meta as Record<string, unknown>)?.key as string | undefined
         const uploadId = (file.meta as Record<string, unknown>)?.uploadId as string | undefined
-        abortUpload(mediaId, key, uploadId)
+        abortUpload(mediaId, key, uploadId, settledMediaIds)
       })
     }
     uppy.on('cancel-all', handleCancelAll)

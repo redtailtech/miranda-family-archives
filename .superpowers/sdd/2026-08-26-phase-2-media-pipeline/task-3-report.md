@@ -274,3 +274,80 @@ npm run lint ✅ PASS
 - ✅ Fix 3b (Abort): Double-abort prevented via Set
 - ✅ Fix 4 (Concurrency): 3-file concurrent processing
 - ✅ Fix 3c (4xx): Non-retryable errors fail immediately
+
+---
+
+## Iteration 4: Lifecycle and Completion Tracking
+
+Commit: `(to be created after final fixes)`
+
+### Fix 1: Track Completed Uploads (Critical) — components/uploader.tsx line 168
+
+**Issue:** After successful `/api/uploads/complete`, the mediaId was not added to the guard set. Result: `cancel-all` or `file-removed` events could still send `/api/uploads/abort` for already-completed uploads.
+
+**Fix Applied:**
+- Line 168: After complete succeeds, immediately add mediaId to `settledMediaIds`:
+  ```typescript
+  // Mark as settled so abort handlers won't try to abort a completed upload
+  if (mediaId) settledMediaIds.add(mediaId)
+  ```
+
+### Fix 2: Move Guard Set to Uppy Instance Closure (Critical) — components/uploader.tsx lines 200-203, 210, 217, 235
+
+**Issue:** `abortedMediaIds` was module-scoped, shared across all Uppy instances on the page. Lifetime mismatch: set persisted after component unmount.
+
+**Fix Applied:**
+- Line 200: Renamed to `settledMediaIds` and moved into `createUppy()` closure:
+  ```typescript
+  const settledMediaIds = new Set<string>()
+  ```
+- Line 203: Pass to `processFilesWithConcurrency()`:
+  ```typescript
+  return processFilesWithConcurrency(fileIds, uppy, settledMediaIds)
+  ```
+- Line 210: Pass to `file-removed` handler:
+  ```typescript
+  abortUpload(mediaId, key, uploadId, settledMediaIds)
+  ```
+- Lines 217, 235: Store in uppy instance for access in `useEffect` (attached dynamically):
+  ```typescript
+  ;(uppy as unknown as Record<string, unknown>).__settledMediaIds = settledMediaIds
+  ```
+  Then retrieve in `cancel-all` handler:
+  ```typescript
+  const settledMediaIds = (uppy as unknown as Record<string, unknown>).__settledMediaIds as Set<string>
+  ```
+
+**Name Change Rationale:** `settledMediaIds` reflects the set's dual purpose: holds both aborted AND completed IDs, representing all uploads that are no longer in-flight.
+
+---
+
+## Final Verification Results
+
+### Build
+```
+npm run build ✅ PASS
+- Compiled successfully in 514ms
+- All routes properly registered including /upload
+```
+
+### TypeScript Check
+```
+npx tsc --noEmit ✅ PASS
+- No type errors (used `unknown` intermediate casts)
+```
+
+### Lint Check
+```
+npm run lint ✅ PASS
+- All ESLint rules satisfied
+```
+
+## Complete Solution Summary
+All 6 fixes applied across 3 iterations:
+1. Event reporting (success/error emission + listener cleanup)
+2. Chunk-level retry with 4xx non-retry handling
+3. Abort on failure with key/uploadId properly set
+4. Double-abort guard with completed-upload tracking
+5. 3-file concurrent processing
+6. Lifecycle-scoped guard set tied to Uppy instance
