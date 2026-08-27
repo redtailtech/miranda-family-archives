@@ -2,9 +2,19 @@
  * Pure family-tree layout algorithm. No prisma/next imports — unit-verifiable
  * in isolation (see the module-level assertions run during Task 4 verification).
  *
- * Algorithm (per Phase 5 Task 4 brief):
+ * Algorithm (per Phase 5 Task 4 brief, pushdown pass added in the 2026-08-27
+ * tree-layout fix):
  *  1. generation = longest ancestor-chain depth (memoized DFS; cycle-safe via a
  *     visiting set — a back-edge contributes depth 0 rather than recursing).
+ *  1.5. Pushdown: anyone with no recorded parents (or otherwise under-placed
+ *     relative to their children) is anchored directly above ALL of their
+ *     children — gen(P) = max(gen(P), min over children C of gen(C) − 1).
+ *     This fixes parentless co-parents (e.g. a divorced parent with no
+ *     spouse link and no recorded parents of their own) floating to
+ *     generation 0 instead of sitting one row above their child. Iterates to
+ *     a fixed point (a parentless grandparent chain above such a person must
+ *     cascade upward too), bounded by maxGen and capped at peopleIds.length
+ *     iterations as a cycle backstop.
  *  2. Spouses are pulled into the same generation (max of the pair/group).
  *  3. Within a generation, nodes are ordered by family cluster: children sort
  *     toward the mean x of their (already-placed) parents, processing
@@ -68,6 +78,55 @@ function computeRawGenerations(
   const result = new Map<string, number>()
   for (const id of peopleIds) result.set(id, gen(id))
   return result
+}
+
+/**
+ * Step 1.5: push parentless (or otherwise under-placed) ancestors down so
+ * they sit directly above ALL of their children. For every person P with at
+ * least one child, gen(P) = max(gen(P), min over children C of gen(C) - 1).
+ * `min` (not max) because a parent with children on different rows must
+ * stay strictly above all of them. Iterates to a fixed point since pushing
+ * P down can make P's own parents eligible for a pushdown in turn; the
+ * update is monotone non-decreasing and bounded, so `while (changed)`
+ * terminates, with peopleIds.length as a cycle backstop.
+ */
+function pushdownParentsAboveChildren(
+  peopleIds: string[],
+  parentLinks: { childId: string; parentId: string }[],
+  rawGen: Map<string, number>
+): Map<string, number> {
+  const knownIds = new Set(peopleIds)
+  const childrenOf = new Map<string, string[]>()
+  for (const { childId, parentId } of parentLinks) {
+    if (!knownIds.has(childId) || !knownIds.has(parentId)) continue
+    if (!childrenOf.has(parentId)) childrenOf.set(parentId, [])
+    childrenOf.get(parentId)!.push(childId)
+  }
+
+  const gen = new Map(rawGen)
+  let changed = true
+  let iterations = 0
+  while (changed && iterations < peopleIds.length) {
+    changed = false
+    iterations++
+    for (const id of peopleIds) {
+      const children = childrenOf.get(id)
+      if (!children || children.length === 0) continue
+      let minChildGen = Infinity
+      for (const c of children) {
+        const cg = gen.get(c)
+        if (cg !== undefined) minChildGen = Math.min(minChildGen, cg)
+      }
+      if (minChildGen === Infinity) continue
+      const target = minChildGen - 1
+      const current = gen.get(id) ?? 0
+      if (target > current) {
+        gen.set(id, target)
+        changed = true
+      }
+    }
+  }
+  return gen
 }
 
 /** Step 2: union-find over spouseLinks; generation of a group = max raw generation in it. */
@@ -164,7 +223,8 @@ export function layoutTree(
   const peopleIds = people.map((p) => p.id)
 
   const rawGen = computeRawGenerations(peopleIds, parentLinks)
-  const finalGen = pullSpousesToSameGeneration(peopleIds, spouseLinks, rawGen)
+  const pushedGen = pushdownParentsAboveChildren(peopleIds, parentLinks, rawGen)
+  const finalGen = pullSpousesToSameGeneration(peopleIds, spouseLinks, pushedGen)
 
   const parentsOfChild = new Map<string, string[]>()
   const knownIds = new Set(peopleIds)
