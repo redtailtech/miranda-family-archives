@@ -6,6 +6,7 @@ import { RetryButton } from '@/components/retry-button'
 import { DetailTabs } from '@/components/detail-tabs'
 import { MediaEditForm } from '@/components/media-edit-form'
 import { ExifTable } from '@/components/exif-table'
+import { HistoryList } from '@/components/history-list'
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -67,7 +68,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
           </>
         }
         advanced={<ExifTable exif={dto.exif} type={dto.type} />}
-        history={<p className="text-lg">Coming right up…</p>}
+        history={<HistoryList mediaId={dto.id} />}
       />
     </div>
   )
