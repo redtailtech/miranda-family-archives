@@ -35,11 +35,9 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
       )}
       {dto.status === 'READY' && dto.type === 'DOCUMENT' && (
         <div>
-          {dto.webUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={dto.webUrl} alt="Page 1" className="w-full rounded-xl border" />
-          )}
-          <p className="mt-2 text-sm">Preview of page 1 — download the original to read the full document.</p>
+          {dto.inlineUrl ? (
+            <iframe src={dto.inlineUrl} title={dto.title ?? dto.originalFilename} className="h-[80vh] w-full rounded-xl border" />
+          ) : null}
         </div>
       )}
       {dto.status !== 'READY' && (

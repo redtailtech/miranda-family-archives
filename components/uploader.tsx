@@ -221,16 +221,85 @@ function createUppy() {
   return uppy
 }
 
+type UploadedFile = { mediaId: string; name: string }
+
+function UploadDetailRow({ mediaId, name }: UploadedFile) {
+  const [title, setTitle] = useState('')
+  const [year, setYear] = useState('')
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [error, setError] = useState('')
+
+  async function save() {
+    setState('saving')
+    const body: Record<string, string | number> = {}
+    if (title.trim()) body.title = title.trim()
+    if (year.trim()) body.dateYear = Number(year.trim())
+    if (Object.keys(body).length === 0) { setState('saved'); return }
+    try {
+      const res = await fetch(`/api/media/${mediaId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        setState('saved')
+      } else {
+        setState('error')
+        setError((await res.json()).error ?? `HTTP ${res.status}`)
+      }
+    } catch {
+      setState('error')
+      setError('Save failed')
+    }
+  }
+
+  return (
+    <li className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+      <span className="min-w-0 flex-1 truncate text-lg" title={name}>{name}</span>
+      <input
+        className="w-48 rounded-lg border px-3 py-2 text-lg"
+        placeholder="Title"
+        value={title}
+        disabled={state === 'saving' || state === 'saved'}
+        onChange={(e) => setTitle(e.target.value)}
+      />
+      <input
+        className="w-24 rounded-lg border px-3 py-2 text-lg"
+        placeholder="Year"
+        inputMode="numeric"
+        maxLength={4}
+        value={year}
+        disabled={state === 'saving' || state === 'saved'}
+        onChange={(e) => setYear(e.target.value.replace(/\D/g, ''))}
+      />
+      {state === 'saved' ? (
+        <span className="text-lg text-green-700">Saved ✓</span>
+      ) : (
+        <button
+          type="button"
+          onClick={save}
+          disabled={state === 'saving'}
+          className="rounded-lg bg-black px-4 py-2 text-lg text-white disabled:opacity-50"
+        >
+          {state === 'saving' ? 'Saving…' : 'Save'}
+        </button>
+      )}
+      {state === 'error' && <span className="text-lg text-red-700">{error}</span>}
+    </li>
+  )
+}
+
 export function Uploader() {
   const [uppy] = useState(createUppy)
-  const [doneCount, setDoneCount] = useState(0)
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
 
   useEffect(() => {
-    const handleComplete = (result: { successful?: unknown[] }) => {
-      setDoneCount(result.successful?.length ?? 0)
+    const handleUploadSuccess = (file: ReturnType<typeof uppy.getFile> | undefined) => {
+      const mediaId = (file?.meta as Record<string, unknown> | undefined)?.mediaId as string | undefined
+      if (!mediaId || !file) return
+      setUploadedFiles((prev) => (prev.some((f) => f.mediaId === mediaId) ? prev : [...prev, { mediaId, name: file.name ?? mediaId }]))
     }
-
-    uppy.on('complete', handleComplete)
+    uppy.on('upload-success', handleUploadSuccess)
 
     // Handle cancel-all event to abort pending uploads
     const handleCancelAll = () => {
@@ -245,7 +314,7 @@ export function Uploader() {
     uppy.on('cancel-all', handleCancelAll)
 
     return () => {
-      uppy.off('complete', handleComplete)
+      uppy.off('upload-success', handleUploadSuccess)
       uppy.off('cancel-all', handleCancelAll)
     }
   }, [uppy])
@@ -253,11 +322,18 @@ export function Uploader() {
   return (
     <div>
       <Dashboard uppy={uppy} proudlyDisplayPoweredByUppy={false} height={420} note="Photos (TIFF, JPEG, PNG, HEIC, WebP) and PDF documents, up to 2 GB each" />
-      {doneCount > 0 && (
-        <p className="mt-4 text-lg">
-          {doneCount} file{doneCount > 1 ? 's' : ''} uploaded — processing now.{' '}
-          <Link className="underline" href="/">View in library</Link>
-        </p>
+      {uploadedFiles.length > 0 && (
+        <div className="mt-4">
+          <p className="text-lg">
+            {uploadedFiles.length} file{uploadedFiles.length > 1 ? 's' : ''} uploaded — processing now. Add a title and year now, or fill in the rest later.{' '}
+            <Link className="underline" href="/">View in library</Link>
+          </p>
+          <ul className="mt-4 grid gap-2">
+            {uploadedFiles.map((f) => (
+              <UploadDetailRow key={f.mediaId} mediaId={f.mediaId} name={f.name} />
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   )

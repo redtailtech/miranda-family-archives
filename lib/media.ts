@@ -48,6 +48,7 @@ export type MediaItemDTO = {
   webUrl?: string | null
   largeUrl?: string | null
   exif?: Record<string, unknown> | null
+  inlineUrl?: string | null
 }
 
 export async function mediaItemToDTO(
@@ -77,6 +78,8 @@ export async function mediaItemToDTO(
     dto.webUrl = item.webKey ? await signGetUrl(item.webKey) : null
     dto.largeUrl = item.largeKey ? await signGetUrl(item.largeKey) : null
     dto.exif = (item.exif as Record<string, unknown> | null) ?? null
+    if (item.type === 'DOCUMENT' && item.status === 'READY')
+      dto.inlineUrl = await signGetUrl(item.originalKey, { expiresIn: 3600 })
   }
   return dto
 }
