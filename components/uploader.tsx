@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Uppy from '@uppy/core'
 import Dashboard from '@uppy/react/dashboard'
 import Link from 'next/link'
@@ -8,6 +8,9 @@ import '@uppy/core/css/style.min.css'
 import '@uppy/dashboard/css/style.min.css'
 
 const CHUNK_SIZE = 25 * 1024 * 1024
+const MAX_CONCURRENT_FILES = 3
+const MAX_RETRIES = 3
+const RETRY_DELAYS = [1000, 3000] // ms delays between retries
 
 async function api(path: string, body: unknown) {
   const res = await fetch(path, {
@@ -41,6 +44,129 @@ async function uploadChunk(signedUrl: string, chunk: Blob, onProgress: (bytesUpl
   })
 }
 
+async function uploadChunkWithRetry(
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  chunk: Blob,
+  fileData: Blob,
+  start: number,
+  uppy: Uppy<Record<string, unknown>, Record<string, unknown>>,
+  file: ReturnType<typeof uppy.getFile>,
+) {
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      // Re-fetch presigned URL on each attempt (URLs can expire)
+      const { url } = await api('/api/uploads/sign-part', { key, uploadId, partNumber })
+      const { etag } = await uploadChunk(url, chunk, (loaded) => {
+        uppy.emit('upload-progress', file, {
+          uploadStarted: Date.now(),
+          bytesUploaded: start + loaded,
+          bytesTotal: fileData.size,
+        })
+      })
+      return { etag }
+    } catch (err) {
+      const isLastAttempt = attempt === MAX_RETRIES - 1
+      if (isLastAttempt) throw err
+      // Wait before retrying
+      const delay = RETRY_DELAYS[attempt] ?? 5000
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+  throw new Error('Max retries exceeded')
+}
+
+async function abortUpload(
+  mediaId: string | undefined,
+  key: string | undefined,
+  uploadId: string | undefined,
+) {
+  if (!mediaId || !key || !uploadId) return
+  try {
+    await api('/api/uploads/abort', { mediaId, key, uploadId })
+  } catch (err) {
+    // Log abort failure but don't throw - upload is already failed
+    console.error('Failed to abort upload:', err)
+  }
+}
+
+async function processFilesWithConcurrency(
+  fileIds: string[],
+  uppy: Uppy<Record<string, unknown>, Record<string, unknown>>,
+) {
+  const results: Array<{ fileId: string; successful: boolean }> = []
+
+  const processFile = async (fileId: string) => {
+    const file = uppy.getFile(fileId)
+    if (!file) return
+
+    let mediaId: string | undefined
+    let key: string | undefined
+    let uploadId: string | undefined
+
+    try {
+      const response = await api('/api/uploads', {
+        filename: file.name,
+        size: file.size,
+        type: file.type,
+      })
+      mediaId = response.mediaId
+      key = response.key
+      uploadId = response.uploadId
+
+      ;(file.meta as Record<string, unknown>).mediaId = mediaId
+
+      const parts: Array<{ PartNumber: number; ETag: string }> = []
+      const fileData = file.data as Blob
+      let uploadedBytes = 0
+
+      for (let partNumber = 1; uploadedBytes < fileData.size; partNumber++) {
+        const start = uploadedBytes
+        const end = Math.min(uploadedBytes + CHUNK_SIZE, fileData.size)
+        const chunk = fileData.slice(start, end)
+
+        const { etag } = await uploadChunkWithRetry(
+          key!,
+          uploadId!,
+          partNumber,
+          chunk,
+          fileData,
+          start,
+          uppy,
+          file,
+        )
+
+        parts.push({ PartNumber: partNumber, ETag: etag })
+        uploadedBytes = end
+      }
+
+      await api('/api/uploads/complete', { mediaId, key, uploadId, parts })
+      uppy.emit('upload-success', file, { status: 200 })
+      results.push({ fileId, successful: true })
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      uppy.emit('upload-error', file, { name: 'UploadError', message: error.message })
+      results.push({ fileId, successful: false })
+      // Abort upload on backend
+      await abortUpload(mediaId, key, uploadId)
+    }
+  }
+
+  const workers = Math.min(MAX_CONCURRENT_FILES, fileIds.length)
+  const queue = [...fileIds]
+
+  const worker = async () => {
+    while (queue.length > 0) {
+      const fileId = queue.shift()
+      if (fileId) await processFile(fileId)
+    }
+  }
+
+  await Promise.all(Array.from({ length: workers }, () => worker()))
+  return results
+}
+
 function createUppy() {
   const uppy = new Uppy<Record<string, unknown>, Record<string, unknown>>({
     restrictions: {
@@ -50,45 +176,15 @@ function createUppy() {
   })
 
   uppy.addUploader(async (fileIds) => {
-    const results = []
-    for (const fileId of fileIds) {
-      const file = uppy.getFile(fileId)
-      if (!file) continue
+    return processFilesWithConcurrency(fileIds, uppy)
+  })
 
-      try {
-        const { mediaId, key, uploadId } = await api('/api/uploads', {
-          filename: file.name,
-          size: file.size,
-          type: file.type,
-        })
-        ;(file.meta as Record<string, unknown>).mediaId = mediaId
-
-        const parts: Array<{ PartNumber: number; ETag: string }> = []
-        const fileData = file.data as Blob
-        let uploadedBytes = 0
-
-        for (let partNumber = 1; uploadedBytes < fileData.size; partNumber++) {
-          const start = uploadedBytes
-          const end = Math.min(uploadedBytes + CHUNK_SIZE, fileData.size)
-          const chunk = fileData.slice(start, end)
-
-          const { url } = await api('/api/uploads/sign-part', { key, uploadId, partNumber })
-          const { etag } = await uploadChunk(url, chunk, (loaded) => {
-            uppy.emit('upload-progress', file, { uploadStarted: Date.now(), bytesUploaded: start + loaded, bytesTotal: fileData.size })
-          })
-
-          parts.push({ PartNumber: partNumber, ETag: etag })
-          uploadedBytes = end
-        }
-
-        await api('/api/uploads/complete', { mediaId, key, uploadId, parts })
-        results.push({ fileId, successful: true })
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err))
-        results.push({ fileId, successful: false, error })
-      }
-    }
-    return results
+  // Handle file removal (user cancelled)
+  uppy.on('file-removed', (file) => {
+    const mediaId = (file.meta as Record<string, unknown>)?.mediaId as string | undefined
+    const key = (file.meta as Record<string, unknown>)?.key as string | undefined
+    const uploadId = (file.meta as Record<string, unknown>)?.uploadId as string | undefined
+    abortUpload(mediaId, key, uploadId)
   })
 
   return uppy
@@ -97,10 +193,31 @@ function createUppy() {
 export function Uploader() {
   const [uppy] = useState(createUppy)
   const [doneCount, setDoneCount] = useState(0)
-  uppy.off('complete', handleComplete).on('complete', handleComplete)
-  function handleComplete(result: { successful?: unknown[] }) {
-    setDoneCount(result.successful?.length ?? 0)
-  }
+
+  useEffect(() => {
+    const handleComplete = (result: { successful?: unknown[] }) => {
+      setDoneCount(result.successful?.length ?? 0)
+    }
+
+    uppy.on('complete', handleComplete)
+
+    // Handle cancel-all event to abort pending uploads
+    const handleCancelAll = () => {
+      uppy.getFiles().forEach((file) => {
+        const mediaId = (file.meta as Record<string, unknown>)?.mediaId as string | undefined
+        const key = (file.meta as Record<string, unknown>)?.key as string | undefined
+        const uploadId = (file.meta as Record<string, unknown>)?.uploadId as string | undefined
+        abortUpload(mediaId, key, uploadId)
+      })
+    }
+    uppy.on('cancel-all', handleCancelAll)
+
+    return () => {
+      uppy.off('complete', handleComplete)
+      uppy.off('cancel-all', handleCancelAll)
+    }
+  }, [uppy])
+
   return (
     <div>
       <Dashboard uppy={uppy} proudlyDisplayPoweredByUppy={false} height={420} note="Photos (TIFF, JPEG, PNG, HEIC, WebP) and PDF documents, up to 2 GB each" />
