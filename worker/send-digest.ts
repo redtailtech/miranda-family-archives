@@ -219,9 +219,11 @@ export async function runDailyDigest(
   opts: { force?: boolean; emailClient?: EmailClient } = {}
 ): Promise<{ sent: number; skipped: string | null }> {
   const today = todayInNewYork()
+  let lockCreatedHere = false
 
   try {
     await prisma.digestLog.create({ data: { date: today } })
+    lockCreatedHere = true
   } catch (err) {
     const isDuplicateLock = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
     if (!isDuplicateLock) throw err
@@ -279,9 +281,14 @@ export async function runDailyDigest(
   } catch (err) {
     // Total failure — either every recipient failed above, or something
     // failed before any send was attempted (e.g. missing RESEND_API_KEY):
-    // delete today's lock so the next run can retry from scratch. A partial
-    // failure never reaches here (see the all-failed branch above).
-    await prisma.digestLog.deleteMany({ where: { date: today } })
+    // delete today's lock ONLY IF WE CREATED IT so the next run can retry
+    // from scratch. If this was a --force rerun of a pre-existing lock that
+    // then failed, leave the lock in place (it was created by a prior
+    // invocation that might have succeeded partially). A partial failure
+    // never reaches here (see the all-failed branch above).
+    if (lockCreatedHere) {
+      await prisma.digestLog.deleteMany({ where: { date: today } })
+    }
     throw err
   }
 }

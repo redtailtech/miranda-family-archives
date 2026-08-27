@@ -7,4 +7,4 @@
 // `dotenv/config` alone only loads `.env`, so load both explicitly.
 import dotenv from 'dotenv'
 
-dotenv.config({ path: ['.env', '.env.local'] })
+dotenv.config({ path: ['.env', '.env.local'], quiet: true })
