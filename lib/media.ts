@@ -56,6 +56,9 @@ export type MediaItemDTO = {
   people?: PersonLite[]
   duplicateOfId: string | null
   duplicateOf?: { id: string; title: string | null; filename: string; thumbUrl: string | null } | null
+  backOfId: string | null
+  back?: { id: string; title: string | null; filename: string; thumbUrl: string | null } | null
+  backOf?: { id: string; title: string | null; filename: string } | null
 }
 
 export type MediaItemWithSocial = MediaItem & {
@@ -90,6 +93,7 @@ export async function mediaItemToDTO(
     heartCount: item._count?.hearts ?? 0,
     heartedByMe: Array.isArray(item.hearts) && item.hearts.length > 0,
     duplicateOfId: item.duplicateOfId,
+    backOfId: item.backOfId,
   }
   if (opts.detail) {
     dto.webUrl = item.webKey ? await signGetUrl(item.webKey) : null
@@ -113,6 +117,21 @@ export async function mediaItemToDTO(
             filename: target.originalFilename,
             thumbUrl: target.thumbKey ? await signGetUrl(target.thumbKey) : null,
           }
+        : null
+    }
+    if (item.backOfId) {
+      const front = await prisma.mediaItem.findFirst({
+        where: { id: item.backOfId, deletedAt: null },
+        select: { id: true, title: true, originalFilename: true },
+      })
+      dto.backOf = front ? { id: front.id, title: front.title, filename: front.originalFilename } : null
+    } else {
+      const back = await prisma.mediaItem.findFirst({
+        where: { backOfId: item.id, deletedAt: null, status: 'READY' },
+        select: { id: true, title: true, originalFilename: true, thumbKey: true },
+      })
+      dto.back = back
+        ? { id: back.id, title: back.title, filename: back.originalFilename, thumbUrl: back.thumbKey ? await signGetUrl(back.thumbKey) : null }
         : null
     }
   }

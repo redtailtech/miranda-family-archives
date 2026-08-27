@@ -37,13 +37,21 @@ export async function POST(req: NextRequest) {
   await prisma.$transaction([
     prisma.mediaItem.update({ where: { id: mediaId }, data: { status: 'PROCESSING' } }),
     prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        entityType: 'media_item',
-        entityId: mediaId,
-        action: 'CREATE',
-        changes: { filename: { from: null, to: item.originalFilename } },
-      },
+      data: item.backOfId
+        ? {
+            userId: user.id,
+            entityType: 'media_item',
+            entityId: item.backOfId,
+            action: 'UPDATE',
+            changes: { back: { from: null, to: item.originalFilename } },
+          }
+        : {
+            userId: user.id,
+            entityType: 'media_item',
+            entityId: mediaId,
+            action: 'CREATE',
+            changes: { filename: { from: null, to: item.originalFilename } },
+          },
     }),
   ])
   await enqueueProcessMedia(mediaId)

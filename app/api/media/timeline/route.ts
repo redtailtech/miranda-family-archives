@@ -21,7 +21,7 @@ export async function GET() {
   const viewerUserId = viewer?.id
 
   const items = await prisma.mediaItem.findMany({
-    where: { status: 'READY', deletedAt: null },
+    where: { status: 'READY', deletedAt: null, backOfId: null },
     orderBy: { createdAt: 'desc' },
     include: {
       uploadedBy: true,

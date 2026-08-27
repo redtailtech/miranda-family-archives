@@ -10,11 +10,33 @@ export async function POST(req: NextRequest) {
   const user = await prisma.user.findUnique({ where: { clerkId: userId } })
   if (!user) return NextResponse.json({ error: 'no user record' }, { status: 403 })
 
-  const { filename, size, type } = await req.json()
+  const { filename, size, type, backOfId } = await req.json()
   const mediaType = mediaTypeForMime(type)
   if (!mediaType) return NextResponse.json({ error: `unsupported file type: ${type}` }, { status: 400 })
   if (!filename || typeof size !== 'number' || size <= 0 || size > MAX_UPLOAD_BYTES)
     return NextResponse.json({ error: 'invalid filename or size (max 2GB)' }, { status: 400 })
+
+  if (backOfId) {
+    if (typeof backOfId !== 'string') return NextResponse.json({ error: 'invalid backOfId' }, { status: 400 })
+    if (mediaType !== 'PHOTO')
+      return NextResponse.json({ error: 'the back of a photo must be a photo' }, { status: 400 })
+    const front = await prisma.mediaItem.findFirst({
+      where: { id: backOfId, deletedAt: null },
+      include: { backItem: { select: { id: true, deletedAt: true } } },
+    })
+    if (!front) return NextResponse.json({ error: 'photo not found' }, { status: 404 })
+    if (front.type !== 'PHOTO')
+      return NextResponse.json({ error: 'only photos can have a back' }, { status: 400 })
+    if (front.backOfId)
+      return NextResponse.json({ error: 'that photo is itself the back of another photo' }, { status: 409 })
+    if (front.backItem && front.backItem.deletedAt === null)
+      return NextResponse.json({ error: 'that photo already has a back' }, { status: 409 })
+    if (front.backItem && front.backItem.deletedAt !== null)
+      return NextResponse.json(
+        { error: 'that photo already has a back in Deleted items — an admin can restore or remove it' },
+        { status: 409 }
+      )
+  }
 
   const item = await prisma.mediaItem.create({
     data: {
@@ -25,6 +47,7 @@ export async function POST(req: NextRequest) {
       originalSize: BigInt(size),
       mimeType: type,
       uploadedById: user.id,
+      ...(backOfId ? { backOfId } : {}),
     },
   })
   const key = originalKey(item.id, filename)

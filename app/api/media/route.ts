@@ -23,6 +23,7 @@ export function buildMediaWhere(
     albumId?: string | null
     favorite?: string | null
     personId?: string | null
+    backs?: string | null
   },
   viewerUserId: string | undefined
 ): Prisma.MediaItemWhereInput {
@@ -57,6 +58,7 @@ export function buildMediaWhere(
     ...(decadeStart !== null ? { dateYear: { gte: decadeStart, lte: decadeStart + 9 } } : {}),
     ...(albumId ? { albumItems: { some: { albumId } } } : {}),
     ...(personId ? { people: { some: { personId } } } : {}),
+    ...(params.backs === '1' ? { backOfId: { not: null } } : { backOfId: null }),
   }
 }
 
@@ -86,6 +88,7 @@ export async function GET(req: NextRequest) {
       albumId: req.nextUrl.searchParams.get('albumId'),
       favorite: req.nextUrl.searchParams.get('favorite'),
       personId: req.nextUrl.searchParams.get('personId'),
+      backs: req.nextUrl.searchParams.get('backs'),
     },
     viewerUserId
   )

@@ -17,7 +17,7 @@ const THUMB_EXPIRES_IN = 518400
 // ruling, that list is shorthand rather than an exhaustive enumeration, and
 // both are substantive metadata edits in the spec's intent. Deliberate
 // inclusion, not an oversight.
-const MEDIA_DIGEST_FIELDS: readonly string[] = [...EDITABLE_MEDIA_FIELDS, 'people']
+const MEDIA_DIGEST_FIELDS: readonly string[] = [...EDITABLE_MEDIA_FIELDS, 'people', 'back']
 // Person relationship changes (parents/spouses) and avatarKey are
 // deliberately NOT digest-worthy — only EDITABLE_PERSON_FIELDS counts.
 const PERSON_DIGEST_FIELDS: readonly string[] = [...EDITABLE_PERSON_FIELDS]
@@ -34,6 +34,7 @@ const MEDIA_FIELD_LABELS: Record<string, string> = {
   dateDay: 'day',
   dateIsApproximate: 'approximate-date flag',
   people: 'people tagged',
+  back: 'back of photo',
 }
 
 const PERSON_FIELD_LABELS: Record<string, string> = {

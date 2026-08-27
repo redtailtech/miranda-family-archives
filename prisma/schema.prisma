@@ -78,6 +78,9 @@ model MediaItem {
   contentHash       String?
   perceptualHash    String?
   duplicateOfId     String?
+  backOfId          String?     @unique
+  backOf            MediaItem?  @relation("PhotoBack", fields: [backOfId], references: [id])
+  backItem          MediaItem?  @relation("PhotoBack")
   deletedAt         DateTime?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
