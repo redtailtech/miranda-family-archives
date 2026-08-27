@@ -336,6 +336,36 @@ export async function updatePersonWithAudit(
   return { changed: Object.keys(changes) }
 }
 
+/**
+ * Sets (or clears) a person's avatarKey, audited as a person UPDATE
+ * `{avatarKey: {from, to}}` — mirrors updatePersonWithAudit's fetch-diff-txn
+ * shape rather than reusing it directly, since avatarKey isn't one of the
+ * form-editable EDITABLE_PERSON_FIELDS and callers pass an already-computed
+ * key (or null) rather than a raw field-input object.
+ */
+export async function updatePersonAvatarWithAudit(
+  personId: string,
+  actorUserId: string,
+  avatarKey: string | null
+): Promise<void> {
+  const person = await prisma.person.findFirst({ where: { id: personId, deletedAt: null } })
+  if (!person) throw Object.assign(new Error('not found'), { status: 404 })
+  if (person.avatarKey === avatarKey) return
+
+  await prisma.$transaction([
+    prisma.person.update({ where: { id: personId }, data: { avatarKey } }),
+    prisma.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'person',
+        entityId: personId,
+        action: 'UPDATE',
+        changes: { avatarKey: { from: person.avatarKey, to: avatarKey } } as Prisma.InputJsonValue,
+      },
+    }),
+  ])
+}
+
 export async function softDeletePersonWithAudit(personId: string, actorUserId: string): Promise<void> {
   const now = new Date()
   const result = await prisma.person.updateMany({

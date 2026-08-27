@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import { personToDTO } from '@/lib/people'
 import { PersonAvatar } from '@/components/person-avatar'
+import { PersonAvatarControls } from '@/components/person-avatar-controls'
 import { PersonForm } from '@/components/person-form'
 import { PersonRelations } from '@/components/person-relations'
 import { PersonAdminActions } from '@/components/person-admin-actions'
@@ -28,7 +29,10 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
       </Link>
 
       <div className="my-6 flex flex-wrap items-center gap-6">
-        <PersonAvatar person={person} size="lg" />
+        <div className="flex flex-col items-center gap-2">
+          <PersonAvatar person={person} size="lg" />
+          {viewer && <PersonAvatarControls personId={person.id} tagCount={person.tagCount} />}
+        </div>
         <div>
           <h1 className="text-3xl font-bold">{person.displayName}</h1>
           {person.maidenName && <p className="text-lg text-black/60">née {person.maidenName}</p>}
