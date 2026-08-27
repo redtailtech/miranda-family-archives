@@ -231,6 +231,11 @@ function UploadDetailRow({ mediaId, name }: UploadedFile) {
 
   async function save() {
     setState('saving')
+    if (year && year.length !== 4) {
+      setState('error')
+      setError('Please enter a 4-digit year')
+      return
+    }
     const body: Record<string, string | number> = {}
     if (title.trim()) body.title = title.trim()
     if (year.trim()) body.dateYear = Number(year.trim())
@@ -245,11 +250,13 @@ function UploadDetailRow({ mediaId, name }: UploadedFile) {
         setState('saved')
       } else {
         setState('error')
-        setError((await res.json()).error ?? `HTTP ${res.status}`)
+        let msg = `HTTP ${res.status}`
+        try { msg = (await res.json()).error ?? msg } catch {}
+        setError(msg)
       }
     } catch {
       setState('error')
-      setError('Save failed')
+      setError("Couldn't save — check your connection and try again.")
     }
   }
 

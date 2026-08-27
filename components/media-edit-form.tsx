@@ -28,18 +28,33 @@ export function MediaEditForm({ item }: { item: MediaItemDTO }) {
     const y = year ? Number(year) : null
     const m = year && month ? Number(month) : null
     const d = year && month && day ? Number(day) : null
+    if (year && year.length !== 4) {
+      setState('error')
+      setError('Please enter a 4-digit year')
+      return
+    }
     if (y !== item.dateYear) body.dateYear = y
     if (m !== item.dateMonth) body.dateMonth = m
     if (d !== item.dateDay) body.dateDay = d
     if (approx !== item.dateIsApproximate) body.dateIsApproximate = approx
     if (Object.keys(body).length === 0) { setState('saved'); return }
-    const res = await fetch(`/api/media/${item.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (res.ok) { setState('saved'); router.refresh() }
-    else { setState('error'); setError((await res.json()).error ?? `HTTP ${res.status}`) }
+    try {
+      const res = await fetch(`/api/media/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) { setState('saved'); router.refresh() }
+      else {
+        setState('error')
+        let msg = `HTTP ${res.status}`
+        try { msg = (await res.json()).error ?? msg } catch {}
+        setError(msg)
+      }
+    } catch {
+      setState('error')
+      setError("Couldn't save — check your connection and try again.")
+    }
   }
 
   const inputCls = 'w-full rounded-lg border px-4 py-3 text-lg'

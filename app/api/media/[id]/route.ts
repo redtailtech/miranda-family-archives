@@ -51,6 +51,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const year = ('dateYear' in body ? body.dateYear : current.dateYear) as number | null
   const month = ('dateMonth' in body ? body.dateMonth : current.dateMonth) as number | null
   const day = ('dateDay' in body ? body.dateDay : current.dateDay) as number | null
+  if (year != null && (year < 1000 || year > 3000))
+    return NextResponse.json({ error: 'year must be a 4-digit year' }, { status: 400 })
   if (!validDateParts(year, month, day))
     return NextResponse.json({ error: 'invalid date: a day needs a month, a month needs a year' }, { status: 400 })
 

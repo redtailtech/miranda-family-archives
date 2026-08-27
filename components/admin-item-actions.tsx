@@ -11,14 +11,23 @@ export function AdminItemActions({ id, deleted }: { id: string; deleted: boolean
   async function act(method: 'DELETE' | 'restore') {
     if (method === 'DELETE' && !confirm('Move this item to Deleted items? An admin can restore it later.')) return
     setBusy(true)
-    const res = await fetch(method === 'DELETE' ? `/api/media/${id}` : `/api/media/${id}/restore`, {
-      method: method === 'DELETE' ? 'DELETE' : 'POST',
-    })
-    setBusy(false)
-    if (res.ok) {
-      if (method === 'DELETE') router.push('/')
-      else router.refresh()
-    } else setError((await res.json()).error ?? `HTTP ${res.status}`)
+    try {
+      const res = await fetch(method === 'DELETE' ? `/api/media/${id}` : `/api/media/${id}/restore`, {
+        method: method === 'DELETE' ? 'DELETE' : 'POST',
+      })
+      setBusy(false)
+      if (res.ok) {
+        if (method === 'DELETE') router.push('/')
+        else router.refresh()
+      } else {
+        let msg = `HTTP ${res.status}`
+        try { msg = (await res.json()).error ?? msg } catch {}
+        setError(msg)
+      }
+    } catch {
+      setBusy(false)
+      setError("Couldn't save — check your connection and try again.")
+    }
   }
 
   return (
