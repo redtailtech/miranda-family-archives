@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import type { Prisma } from '@prisma/client'
+import type { Prisma, Gender } from '@prisma/client'
 
 export const EDITABLE_MEDIA_FIELDS = [
   'title',
@@ -197,6 +197,329 @@ export async function deleteAlbumWithAudit(albumId: string, actorUserId: string)
       },
     }),
   ])
+}
+
+// ---------------------------------------------------------------------------
+// People & relationships
+// ---------------------------------------------------------------------------
+
+export const EDITABLE_PERSON_FIELDS = [
+  'displayName',
+  'maidenName',
+  'gender',
+  'birthYear',
+  'deathYear',
+  'birthplace',
+  'notes',
+] as const
+
+export type EditablePersonField = (typeof EDITABLE_PERSON_FIELDS)[number]
+export type EditablePersonInput = Partial<Record<EditablePersonField, unknown>>
+
+export type NewPersonInput = {
+  displayName: string
+  maidenName?: string | null
+  gender?: Gender
+  birthYear?: number | null
+  deathYear?: number | null
+  birthplace?: string | null
+  notes?: string | null
+}
+
+const PERSON_GENDERS = ['MALE', 'FEMALE', 'UNSPECIFIED']
+
+/**
+ * Validate the runtime type/shape of a (possibly partial) person input.
+ * Returns an error message string, or null when valid. Mirrors the typing
+ * rigor of `validFieldValue`: objects/arrays are rejected for every field.
+ */
+export function validPersonInput(input: EditablePersonInput): string | null {
+  if ('displayName' in input) {
+    if (typeof input.displayName !== 'string' || input.displayName.trim() === '')
+      return 'displayName must be a non-empty string'
+  }
+  for (const field of ['maidenName', 'birthplace', 'notes'] as const) {
+    if (field in input && input[field] !== null && typeof input[field] !== 'string')
+      return `${field} must be a string or null`
+  }
+  if ('gender' in input) {
+    if (typeof input.gender !== 'string' || !PERSON_GENDERS.includes(input.gender))
+      return 'gender must be one of MALE, FEMALE, UNSPECIFIED'
+  }
+  for (const field of ['birthYear', 'deathYear'] as const) {
+    if (field in input) {
+      const value = input[field]
+      if (value !== null && (typeof value !== 'number' || !Number.isInteger(value) || value < 1000 || value > 3000))
+        return `${field} must be null or a 4-digit year`
+    }
+  }
+  if ('birthYear' in input && 'deathYear' in input) {
+    const birthYear = input.birthYear as number | null
+    const deathYear = input.deathYear as number | null
+    if (birthYear != null && deathYear != null && deathYear < birthYear)
+      return 'deathYear must be greater than or equal to birthYear'
+  }
+  return null
+}
+
+function personFieldDiff(
+  current: Record<string, unknown>,
+  input: EditablePersonInput
+): Record<string, { from: unknown; to: unknown }> {
+  const changes: Record<string, { from: unknown; to: unknown }> = {}
+  for (const field of EDITABLE_PERSON_FIELDS) {
+    if (!(field in input)) continue
+    const to = input[field] ?? null
+    const from = current[field] ?? null
+    if (from !== to) changes[field] = { from, to }
+  }
+  return changes
+}
+
+export async function createPersonWithAudit(
+  actorUserId: string,
+  data: NewPersonInput
+): Promise<{ id: string }> {
+  const person = await prisma.$transaction(async (tx) => {
+    const created = await tx.person.create({
+      data: {
+        displayName: data.displayName,
+        maidenName: data.maidenName ?? null,
+        gender: data.gender ?? undefined,
+        birthYear: data.birthYear ?? null,
+        deathYear: data.deathYear ?? null,
+        birthplace: data.birthplace ?? null,
+        notes: data.notes ?? null,
+      },
+    })
+    await tx.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'person',
+        entityId: created.id,
+        action: 'CREATE',
+        changes: { displayName: { from: null, to: data.displayName } },
+      },
+    })
+    return created
+  })
+  return { id: person.id }
+}
+
+export async function updatePersonWithAudit(
+  personId: string,
+  actorUserId: string,
+  input: EditablePersonInput
+): Promise<{ changed: string[] }> {
+  const person = await prisma.person.findFirst({ where: { id: personId, deletedAt: null } })
+  if (!person) throw Object.assign(new Error('not found'), { status: 404 })
+
+  const changes = personFieldDiff(person as unknown as Record<string, unknown>, input)
+  if (Object.keys(changes).length === 0) return { changed: [] }
+
+  const data = Object.fromEntries(
+    Object.entries(changes).map(([field, { to }]) => [field, to])
+  ) as Prisma.PersonUpdateInput
+
+  await prisma.$transaction([
+    prisma.person.update({ where: { id: personId }, data }),
+    prisma.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'person',
+        entityId: personId,
+        action: 'UPDATE',
+        changes: changes as Prisma.InputJsonValue,
+      },
+    }),
+  ])
+  return { changed: Object.keys(changes) }
+}
+
+export async function softDeletePersonWithAudit(personId: string, actorUserId: string): Promise<void> {
+  const now = new Date()
+  const result = await prisma.person.updateMany({
+    where: { id: personId, deletedAt: null },
+    data: { deletedAt: now },
+  })
+  if (result.count !== 1) throw Object.assign(new Error('not found'), { status: 404 })
+  await prisma.auditLog.create({
+    data: {
+      userId: actorUserId,
+      entityType: 'person',
+      entityId: personId,
+      action: 'DELETE',
+      changes: { deletedAt: { from: null, to: now.toISOString() } },
+    },
+  })
+}
+
+export async function restorePersonWithAudit(personId: string, actorUserId: string): Promise<void> {
+  const person = await prisma.person.findFirst({ where: { id: personId, NOT: { deletedAt: null } } })
+  if (!person) throw Object.assign(new Error('not deleted'), { status: 400 })
+  await prisma.$transaction([
+    prisma.person.update({ where: { id: personId }, data: { deletedAt: null } }),
+    prisma.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'person',
+        entityId: personId,
+        action: 'UPDATE',
+        changes: { deletedAt: { from: person.deletedAt!.toISOString(), to: null } },
+      },
+    }),
+  ])
+}
+
+/** True if `candidateAncestorId` has `personId` anywhere in their ancestor chain — used to block cycles. */
+async function wouldCreateCycle(childId: string, parentId: string): Promise<boolean> {
+  const seen = new Set<string>()
+  let frontier = [parentId]
+  while (frontier.length > 0) {
+    if (frontier.includes(childId)) return true
+    const rows = await prisma.parentChild.findMany({
+      where: { childId: { in: frontier } },
+      select: { parentId: true },
+    })
+    frontier = rows.map((r) => r.parentId).filter((id) => !seen.has(id))
+    frontier.forEach((id) => seen.add(id))
+  }
+  return false
+}
+
+async function currentParentNames(tx: Prisma.TransactionClient, childId: string): Promise<string[]> {
+  const rows = await tx.parentChild.findMany({ where: { childId }, include: { parent: true } })
+  return rows.map((r) => r.parent.displayName).sort()
+}
+
+async function currentSpouseNames(tx: Prisma.TransactionClient, personId: string): Promise<string[]> {
+  const [asA, asB] = await Promise.all([
+    tx.spouse.findMany({ where: { personAId: personId }, include: { personB: true } }),
+    tx.spouse.findMany({ where: { personBId: personId }, include: { personA: true } }),
+  ])
+  return [...asA.map((r) => r.personB.displayName), ...asB.map((r) => r.personA.displayName)].sort()
+}
+
+export async function addParentWithAudit(childId: string, parentId: string, actorUserId: string): Promise<void> {
+  if (childId === parentId) throw Object.assign(new Error('a person cannot be their own parent'), { status: 400 })
+  const [child, parent] = await Promise.all([
+    prisma.person.findFirst({ where: { id: childId, deletedAt: null } }),
+    prisma.person.findFirst({ where: { id: parentId, deletedAt: null } }),
+  ])
+  if (!child || !parent) throw Object.assign(new Error('person not found'), { status: 404 })
+  const existing = await prisma.parentChild.findUnique({ where: { childId_parentId: { childId, parentId } } })
+  if (existing) throw Object.assign(new Error('that parent relationship already exists'), { status: 400 })
+  if (await wouldCreateCycle(childId, parentId))
+    throw Object.assign(new Error('that would make someone their own ancestor'), { status: 400 })
+
+  await prisma.$transaction(async (tx) => {
+    const beforeNames = await currentParentNames(tx, childId)
+    await tx.parentChild.create({ data: { childId, parentId } })
+    const afterNames = await currentParentNames(tx, childId)
+    await tx.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'person',
+        entityId: childId,
+        action: 'UPDATE',
+        changes: { parents: { from: beforeNames, to: afterNames } } as Prisma.InputJsonValue,
+      },
+    })
+  })
+}
+
+export async function removeParentWithAudit(childId: string, parentId: string, actorUserId: string): Promise<void> {
+  const existing = await prisma.parentChild.findUnique({ where: { childId_parentId: { childId, parentId } } })
+  if (!existing) throw Object.assign(new Error('that parent relationship does not exist'), { status: 404 })
+
+  await prisma.$transaction(async (tx) => {
+    const beforeNames = await currentParentNames(tx, childId)
+    await tx.parentChild.delete({ where: { childId_parentId: { childId, parentId } } })
+    const afterNames = await currentParentNames(tx, childId)
+    await tx.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'person',
+        entityId: childId,
+        action: 'UPDATE',
+        changes: { parents: { from: beforeNames, to: afterNames } } as Prisma.InputJsonValue,
+      },
+    })
+  })
+}
+
+export async function addSpouseWithAudit(
+  personAId: string,
+  personBId: string,
+  actorUserId: string
+): Promise<void> {
+  if (personAId === personBId)
+    throw Object.assign(new Error('a person cannot be their own spouse'), { status: 400 })
+  const [a, b] = await Promise.all([
+    prisma.person.findFirst({ where: { id: personAId, deletedAt: null } }),
+    prisma.person.findFirst({ where: { id: personBId, deletedAt: null } }),
+  ])
+  if (!a || !b) throw Object.assign(new Error('person not found'), { status: 404 })
+  const existing = await prisma.spouse.findFirst({
+    where: {
+      OR: [
+        { personAId, personBId },
+        { personAId: personBId, personBId: personAId },
+      ],
+    },
+  })
+  if (existing) throw Object.assign(new Error('that spouse relationship already exists'), { status: 400 })
+
+  await prisma.$transaction(async (tx) => {
+    const beforeNames = await currentSpouseNames(tx, personAId)
+    await tx.spouse.create({ data: { personAId, personBId } })
+    const afterNames = await currentSpouseNames(tx, personAId)
+    await tx.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'person',
+        entityId: personAId,
+        action: 'UPDATE',
+        changes: { spouses: { from: beforeNames, to: afterNames } } as Prisma.InputJsonValue,
+      },
+    })
+  })
+}
+
+export async function removeSpouseWithAudit(
+  personAId: string,
+  personBId: string,
+  actorUserId: string
+): Promise<void> {
+  const forward = await prisma.spouse.findUnique({
+    where: { personAId_personBId: { personAId, personBId } },
+  })
+  const backward = forward
+    ? null
+    : await prisma.spouse.findUnique({
+        where: { personAId_personBId: { personAId: personBId, personBId: personAId } },
+      })
+  if (!forward && !backward)
+    throw Object.assign(new Error('that spouse relationship does not exist'), { status: 404 })
+
+  await prisma.$transaction(async (tx) => {
+    const beforeNames = await currentSpouseNames(tx, personAId)
+    if (forward) {
+      await tx.spouse.delete({ where: { personAId_personBId: { personAId, personBId } } })
+    } else {
+      await tx.spouse.delete({ where: { personAId_personBId: { personAId: personBId, personBId: personAId } } })
+    }
+    const afterNames = await currentSpouseNames(tx, personAId)
+    await tx.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'person',
+        entityId: personAId,
+        action: 'UPDATE',
+        changes: { spouses: { from: beforeNames, to: afterNames } } as Prisma.InputJsonValue,
+      },
+    })
+  })
 }
 
 export async function albumItemsChangeWithAudit(
