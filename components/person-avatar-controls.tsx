@@ -3,6 +3,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { MediaItemDTO } from '@/lib/media'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024
 
@@ -124,15 +131,6 @@ export function PersonAvatarControls({ personId, tagCount }: { personId: string;
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (!menuOpen) return
-    function onDocClick() {
-      setMenuOpen(false)
-    }
-    document.addEventListener('click', onDocClick)
-    return () => document.removeEventListener('click', onDocClick)
-  }, [menuOpen])
-
   async function uploadFile(file: File) {
     setError('')
     if (file.size > MAX_AVATAR_BYTES) {
@@ -187,57 +185,26 @@ export function PersonAvatarControls({ personId, tagCount }: { personId: string;
 
   return (
     <span className="relative inline-block">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          setMenuOpen((v) => !v)
-        }}
-        disabled={busy}
-        className="rounded-xl border px-4 py-2 text-lg disabled:opacity-50"
-      >
-        {busy ? 'Saving…' : 'Change photo'}
-      </button>
-
-      {menuOpen && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="absolute left-0 top-12 z-10 grid min-w-[14rem] gap-1 rounded-xl border bg-white p-2 shadow-lg"
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen(false)
-              fileInputRef.current?.click()
-            }}
-            className="rounded-lg px-3 py-2 text-left text-base hover:bg-black/5"
-          >
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" disabled={busy}>
+            {busy ? 'Saving…' : 'Change photo'}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-[14rem]">
+          <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
             Upload a photo
-          </button>
+          </DropdownMenuItem>
           {tagCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false)
-                setShowPicker(true)
-              }}
-              className="rounded-lg px-3 py-2 text-left text-base hover:bg-black/5"
-            >
+            <DropdownMenuItem onSelect={() => setShowPicker(true)}>
               Choose from their photos
-            </button>
+            </DropdownMenuItem>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen(false)
-              clearAvatar()
-            }}
-            className="rounded-lg px-3 py-2 text-left text-base text-red-700 hover:bg-black/5"
-          >
+          <DropdownMenuItem variant="destructive" onSelect={clearAvatar}>
             Use silhouette
-          </button>
-        </div>
-      )}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <input
         ref={fileInputRef}

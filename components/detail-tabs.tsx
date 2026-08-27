@@ -1,28 +1,30 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const TABS = ['Details', 'Advanced', 'History'] as const
 
 export function DetailTabs({ details, advanced, history }: { details: ReactNode; advanced: ReactNode; history: ReactNode }) {
-  const [active, setActive] = useState<(typeof TABS)[number]>('Details')
   const panels = { Details: details, Advanced: advanced, History: history }
   return (
-    <div className="mt-8">
-      <div role="tablist" className="flex gap-1 border-b">
+    <Tabs defaultValue="Details" className="mt-8">
+      <TabsList className="w-full justify-start gap-1 rounded-none border-b bg-transparent p-0 group-data-horizontal/tabs:h-auto">
         {TABS.map((tab) => (
-          <button
+          <TabsTrigger
             key={tab}
-            role="tab"
-            aria-selected={active === tab}
-            onClick={() => setActive(tab)}
-            className={`rounded-t-lg px-5 py-3 text-lg ${active === tab ? 'border border-b-0 bg-white font-semibold' : 'text-black/60 hover:bg-black/5'}`}
+            value={tab}
+            className="rounded-t-lg rounded-b-none border border-b-0 border-transparent px-5 py-3 text-lg font-normal text-black/60 shadow-none hover:bg-black/5 data-active:border-border data-active:bg-white data-active:font-semibold data-active:text-foreground data-active:shadow-none"
           >
             {tab}
-          </button>
+          </TabsTrigger>
         ))}
-      </div>
-      <div className="py-6">{panels[active]}</div>
-    </div>
+      </TabsList>
+      {TABS.map((tab) => (
+        <TabsContent key={tab} value={tab} className="py-6 text-lg">
+          {panels[tab]}
+        </TabsContent>
+      ))}
+    </Tabs>
   )
 }

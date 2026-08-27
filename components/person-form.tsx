@@ -3,8 +3,25 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { PersonDTO } from '@/lib/people'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 type Gender = 'MALE' | 'FEMALE' | 'UNSPECIFIED'
+
+const GENDER_LABELS: Record<Gender, string> = {
+  UNSPECIFIED: 'Unspecified',
+  MALE: 'Male',
+  FEMALE: 'Female',
+}
 
 /**
  * Create/edit form for a person. With no `person`, it's always in edit mode
@@ -156,18 +173,13 @@ export function PersonForm({
         ) : (
           <p className="text-lg text-black/60">No notes yet.</p>
         )}
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="mt-4 rounded-xl border px-5 py-3 text-lg"
-        >
+        <Button type="button" variant="outline" onClick={() => setEditing(true)} className="mt-4">
           Edit details
-        </button>
+        </Button>
       </div>
     )
   }
 
-  const inputCls = 'w-full rounded-lg border px-4 py-3 text-lg'
   return (
     <form
       className="grid max-w-xl gap-4"
@@ -176,92 +188,85 @@ export function PersonForm({
         save()
       }}
     >
-      <label className="grid gap-1 text-lg">
+      <Label className="grid gap-1 text-lg">
         Name
-        <input
-          className={inputCls}
+        <Input
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="e.g. Maria Miranda"
           autoFocus
         />
-      </label>
-      <label className="grid gap-1 text-lg">
+      </Label>
+      <Label className="grid gap-1 text-lg">
         Maiden name
-        <input
-          className={inputCls}
+        <Input
           value={maidenName}
           onChange={(e) => setMaidenName(e.target.value)}
           placeholder="Optional"
         />
-      </label>
-      <label className="grid gap-1 text-lg">
+      </Label>
+      <Label className="grid gap-1 text-lg">
         Gender
-        <select
-          className={inputCls}
-          value={gender}
-          onChange={(e) => setGender(e.target.value as Gender)}
-        >
-          <option value="UNSPECIFIED">Unspecified</option>
-          <option value="MALE">Male</option>
-          <option value="FEMALE">Female</option>
-        </select>
-      </label>
+        <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(GENDER_LABELS) as Gender[]).map((g) => (
+              <SelectItem key={g} value={g}>{GENDER_LABELS[g]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Label>
       <div className="flex flex-wrap gap-4">
-        <label className="grid gap-1 text-lg">
+        <Label className="grid gap-1 text-lg">
           Birth year
-          <input
-            className="w-32 rounded-lg border px-4 py-3 text-lg"
+          <Input
+            className="w-32"
             inputMode="numeric"
             maxLength={4}
             placeholder="e.g. 1950"
             value={birthYear}
             onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, ''))}
           />
-        </label>
-        <label className="grid gap-1 text-lg">
+        </Label>
+        <Label className="grid gap-1 text-lg">
           Death year
-          <input
-            className="w-32 rounded-lg border px-4 py-3 text-lg"
+          <Input
+            className="w-32"
             inputMode="numeric"
             maxLength={4}
             placeholder="Optional"
             value={deathYear}
             onChange={(e) => setDeathYear(e.target.value.replace(/\D/g, ''))}
           />
-        </label>
+        </Label>
       </div>
-      <label className="grid gap-1 text-lg">
+      <Label className="grid gap-1 text-lg">
         Birthplace
-        <input
-          className={inputCls}
+        <Input
           value={birthplace}
           onChange={(e) => setBirthplace(e.target.value)}
           placeholder="e.g. Hilo, Hawaii"
         />
-      </label>
-      <label className="grid gap-1 text-lg">
+      </Label>
+      <Label className="grid gap-1 text-lg">
         Notes
-        <textarea
-          className={inputCls}
+        <Textarea
           rows={4}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Anything worth remembering"
         />
-      </label>
+      </Label>
       <div className="flex items-center gap-4">
-        <button
-          type="submit"
-          disabled={state === 'saving'}
-          className="rounded-xl bg-black px-6 py-3 text-lg text-white disabled:opacity-50"
-        >
+        <Button type="submit" disabled={state === 'saving'}>
           {state === 'saving' ? 'Saving…' : person ? 'Save changes' : 'Add person'}
-        </button>
+        </Button>
         {(onCancel || person) && (
-          <button type="button" onClick={cancel} className="rounded-xl border px-6 py-3 text-lg">
+          <Button type="button" variant="outline" onClick={cancel}>
             Cancel
-          </button>
+          </Button>
         )}
         {state === 'error' && <span className="text-lg text-red-700">{error}</span>}
       </div>

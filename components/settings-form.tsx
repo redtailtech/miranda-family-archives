@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 
 type Profile = {
   name: string
@@ -83,23 +86,12 @@ function DigestToggle({ initialEnabled }: { initialEnabled: boolean }) {
         One email a day when family adds photos or people — nothing on quiet days.
       </p>
       <div className="flex flex-wrap items-center gap-4">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={digestEnabled}
-          aria-label="Daily email digest"
-          onClick={toggle}
+        <Switch
+          checked={digestEnabled}
+          onCheckedChange={toggle}
           disabled={state === 'saving'}
-          className={`relative inline-flex h-11 w-20 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-            digestEnabled ? 'bg-green-600' : 'bg-ink/25'
-          }`}
-        >
-          <span
-            className={`inline-block h-9 w-9 transform rounded-full bg-white shadow transition-transform ${
-              digestEnabled ? 'translate-x-10' : 'translate-x-1'
-            }`}
-          />
-        </button>
+          aria-label="Daily email digest"
+        />
         <span className="text-lg">{digestEnabled ? 'On' : 'Off'}</span>
         {state === 'saved' && <span className="text-lg text-green-700">Saved ✓</span>}
         {state === 'error' && <span className="text-lg text-red-700">{error}</span>}
@@ -150,10 +142,10 @@ function AdminInvite() {
           sendInvite()
         }}
       >
-        <input
+        <Input
           type="email"
           required
-          className="min-h-12 min-w-[16rem] flex-1 rounded-xl border border-ink/25 px-4 py-3 text-lg"
+          className="min-w-[16rem] flex-1"
           placeholder="name@example.com"
           value={email}
           onChange={(e) => {
@@ -161,13 +153,9 @@ function AdminInvite() {
             if (state === 'sent' || state === 'error') setState('idle')
           }}
         />
-        <button
-          type="submit"
-          disabled={state === 'sending' || !email.trim()}
-          className="min-h-12 rounded-xl bg-ink px-6 py-3 text-lg font-medium text-paper hover:bg-sepia disabled:opacity-50"
-        >
+        <Button type="submit" disabled={state === 'sending' || !email.trim()}>
           {state === 'sending' ? 'Sending…' : 'Send invite'}
-        </button>
+        </Button>
       </form>
       {state === 'sent' && <p className="text-lg text-green-700">Invitation sent to {invitedEmail}</p>}
       {state === 'error' && <p className="text-lg text-red-700">{error}</p>}

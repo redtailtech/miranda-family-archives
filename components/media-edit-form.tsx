@@ -3,8 +3,26 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { MediaItemDTO } from '@/lib/media'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
+// Radix Select forbids an empty-string item value, so the "(optional) —
+// clear the field" option needs a sentinel that's translated back to '' at
+// the state boundary. External behavior (month/day can be reset to unset
+// via the dropdown, which also clears day) is unchanged from the native
+// <select> version.
+const UNSET = '__unset__'
 
 export function MediaEditForm({ item }: { item: MediaItemDTO }) {
   const router = useRouter()
@@ -57,32 +75,44 @@ export function MediaEditForm({ item }: { item: MediaItemDTO }) {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border px-4 py-3 text-lg'
   return (
     <form className="grid max-w-xl gap-4" onSubmit={(e) => { e.preventDefault(); save() }}>
-      <label className="grid gap-1 text-lg">Title
-        <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Grandma at the lake house" />
-      </label>
-      <label className="grid gap-1 text-lg">Description
-        <textarea className={inputCls} rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Who, what, where — tell the story" />
-      </label>
-      <label className="grid gap-1 text-lg">Location
-        <input className={inputCls} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Hilo, Hawaii" />
-      </label>
+      <Label className="grid gap-1 text-lg">Title
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Grandma at the lake house" />
+      </Label>
+      <Label className="grid gap-1 text-lg">Description
+        <Textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Who, what, where — tell the story" />
+      </Label>
+      <Label className="grid gap-1 text-lg">Location
+        <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Hilo, Hawaii" />
+      </Label>
       <fieldset className="grid gap-2">
         <legend className="text-lg">When was this? Fill in what you know.</legend>
         <div className="flex flex-wrap gap-3">
-          <input className="w-28 rounded-lg border px-4 py-3 text-lg" inputMode="numeric" maxLength={4} placeholder="Year" value={year}
+          <Input className="w-28" inputMode="numeric" maxLength={4} placeholder="Year" value={year}
             onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setYear(v); if (!v) { setMonth(''); setDay('') } }} />
-          <select className="rounded-lg border px-4 py-3 text-lg" value={month} disabled={!year}
-            onChange={(e) => { setMonth(e.target.value); if (!e.target.value) setDay('') }}>
-            <option value="">Month (optional)</option>
-            {MONTHS.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
-          </select>
-          <select className="rounded-lg border px-4 py-3 text-lg" value={day} disabled={!month} onChange={(e) => setDay(e.target.value)}>
-            <option value="">Day (optional)</option>
-            {Array.from({ length: 31 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-          </select>
+          <Select
+            value={month || UNSET}
+            onValueChange={(v) => { const next = v === UNSET ? '' : v; setMonth(next); if (!next) setDay('') }}
+            disabled={!year}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Month (optional)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UNSET}>Month (optional)</SelectItem>
+              {MONTHS.map((name, i) => <SelectItem key={name} value={String(i + 1)}>{name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={day || UNSET} onValueChange={(v) => setDay(v === UNSET ? '' : v)} disabled={!month}>
+            <SelectTrigger>
+              <SelectValue placeholder="Day (optional)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UNSET}>Day (optional)</SelectItem>
+              {Array.from({ length: 31 }, (_, i) => <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <label className="flex items-center gap-2 text-lg">
           <input type="checkbox" className="h-5 w-5" checked={approx} onChange={(e) => setApprox(e.target.checked)} />
@@ -90,9 +120,9 @@ export function MediaEditForm({ item }: { item: MediaItemDTO }) {
         </label>
       </fieldset>
       <div className="flex items-center gap-4">
-        <button type="submit" disabled={state === 'saving'} className="rounded-xl bg-black px-6 py-3 text-lg text-white disabled:opacity-50">
+        <Button type="submit" disabled={state === 'saving'}>
           {state === 'saving' ? 'Saving…' : 'Save details'}
-        </button>
+        </Button>
         {state === 'saved' && <span className="text-lg text-green-700">Saved ✓</span>}
         {state === 'error' && <span className="text-lg text-red-700">{error}</span>}
       </div>

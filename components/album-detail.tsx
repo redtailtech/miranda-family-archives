@@ -23,19 +23,25 @@ import type { AlbumDTO } from '@/lib/albums'
 import type { MediaItemDTO } from '@/lib/media'
 import { AlbumForm } from '@/components/album-form'
 import { useConfirm } from '@/components/confirm-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 function AlbumItemTile({
   item,
   isCover,
   menuOpen,
-  onToggleMenu,
+  onOpenMenuChange,
   onRemove,
   onMakeCover,
 }: {
   item: MediaItemDTO
   isCover: boolean
   menuOpen: boolean
-  onToggleMenu: () => void
+  onOpenMenuChange: (open: boolean) => void
   onRemove: () => void
   onMakeCover: () => void
 }) {
@@ -76,41 +82,24 @@ function AlbumItemTile({
         </span>
       )}
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          onToggleMenu()
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-        aria-label="Item actions"
-        className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-surface/95 text-xl leading-none shadow"
-      >
-        ⋮
-      </button>
-
-      {menuOpen && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="absolute right-2 top-14 z-10 grid min-w-[12rem] gap-1 rounded-xl border bg-surface p-2 shadow-lg"
-        >
+      <DropdownMenu open={menuOpen} onOpenChange={onOpenMenuChange}>
+        <DropdownMenuTrigger asChild>
           <button
             type="button"
-            onClick={onMakeCover}
-            className="rounded-lg px-4 py-2.5 text-left text-lg hover:bg-wash"
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-label="Item actions"
+            className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-surface/95 text-xl leading-none shadow"
           >
-            Make cover
+            ⋮
           </button>
-          <button
-            type="button"
-            onClick={onRemove}
-            className="rounded-lg px-4 py-2.5 text-left text-lg text-red-700 hover:bg-wash"
-          >
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[12rem]">
+          <DropdownMenuItem onSelect={onMakeCover}>Make cover</DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onSelect={onRemove}>
             Remove from album
-          </button>
-        </div>
-      )}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
@@ -242,15 +231,6 @@ export function AlbumDetail({ album, items }: { album: AlbumDTO; items: MediaIte
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOrderedItems(items)
   }, [items])
-
-  useEffect(() => {
-    if (!openMenuId) return
-    function onDocClick() {
-      setOpenMenuId(null)
-    }
-    document.addEventListener('click', onDocClick)
-    return () => document.removeEventListener('click', onDocClick)
-  }, [openMenuId])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -396,7 +376,7 @@ export function AlbumDetail({ album, items }: { album: AlbumDTO; items: MediaIte
                   item={item}
                   isCover={item.id === album.coverMediaId}
                   menuOpen={openMenuId === item.id}
-                  onToggleMenu={() => setOpenMenuId((prev) => (prev === item.id ? null : item.id))}
+                  onOpenMenuChange={(open) => setOpenMenuId(open ? item.id : null)}
                   onRemove={() => removeItem(item.id)}
                   onMakeCover={() => makeCover(item.id)}
                 />

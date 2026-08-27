@@ -3,6 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { AlbumDTO } from '@/lib/albums'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 
 export function AlbumForm({
   album,
@@ -80,7 +84,6 @@ export function AlbumForm({
     }
   }
 
-  const inputCls = 'w-full rounded-lg border px-4 py-3 text-lg'
   return (
     <form
       className="grid gap-4"
@@ -89,38 +92,32 @@ export function AlbumForm({
         save()
       }}
     >
-      <label className="grid gap-1 text-lg">
+      <Label className="grid gap-1 text-lg">
         Name
-        <input
-          className={inputCls}
+        <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Summer in Hilo"
           autoFocus
         />
-      </label>
-      <label className="grid gap-1 text-lg">
+      </Label>
+      <Label className="grid gap-1 text-lg">
         Description
-        <textarea
-          className={inputCls}
+        <Textarea
           rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Optional"
         />
-      </label>
+      </Label>
       <div className="flex items-center gap-4">
-        <button
-          type="submit"
-          disabled={state === 'saving'}
-          className="rounded-xl bg-black px-6 py-3 text-lg text-white disabled:opacity-50"
-        >
+        <Button type="submit" disabled={state === 'saving'}>
           {state === 'saving' ? 'Saving…' : album ? 'Save changes' : 'Create album'}
-        </button>
+        </Button>
         {onCancel && (
-          <button type="button" onClick={onCancel} className="rounded-xl border px-6 py-3 text-lg">
+          <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
         )}
         {state === 'error' && <span className="text-lg text-red-700">{error}</span>}
       </div>
