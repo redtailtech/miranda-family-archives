@@ -40,13 +40,47 @@
  *     overlaps by never placing a node left of (previous node's x + spacing).
  *     y = generation * (cardH + gapY).
  *  5. Edges: one 'spouse' edge per couple, one 'parent' edge per ParentChild link.
+ *  6. Family connectors (added in the 2026-08-27 tree-fix round 2, connector
+ *     routing): children are grouped into "family units" by their exact
+ *     parent set (key = sorted parentIds). Each unit gets one drops/rail/
+ *     risers connector instead of one independent path per (parent, child)
+ *     pair, so multiple families sharing a row-gap don't visually merge into
+ *     one ambiguous horizontal line. Per unit: parentDrops run from each
+ *     parent's bottom-center down to a shared railY; the rail runs
+ *     horizontally at railY spanning every parentDrop/childRiser x;
+ *     childRisers run from railY down to each child's top-center. railY sits
+ *     in the row-gap directly above the unit's shallowest (topmost) child
+ *     row. Units whose rails fall in the same gap and whose x-ranges overlap
+ *     (padded by gapX) are greedily interval-colored into distinct lane
+ *     indices (sorted by rail xmin, lowest free lane wins), each lane a
+ *     fixed 16px offset further into the gap band, capped at 4 lanes with
+ *     wraparound beyond that (5+ overlapping families in one gap is out of
+ *     scope). `edges` is unchanged — `layoutTree` still returns one 'parent'
+ *     edge per ParentChild link for callers that don't consume connectors.
  */
 
 export type TreeNode = { id: string; x: number; y: number }
 export type TreeEdge =
   | { kind: 'parent'; from: string; to: string } // parent -> child
   | { kind: 'spouse'; a: string; b: string }
-export type TreeLayout = { nodes: TreeNode[]; edges: TreeEdge[]; width: number; height: number }
+/** A single vertical connector segment (drop or riser): x is fixed, y1 is the top, y2 the bottom. */
+export type FamilySegment = { x: number; y1: number; y2: number }
+/** One family-unit connector: shared parents' drops + a lane-separated rail + children's risers. */
+export type FamilyConnector = {
+  parentIds: string[]
+  childIds: string[]
+  railY: number
+  parentDrops: FamilySegment[]
+  rail: { x1: number; x2: number; y: number }
+  childRisers: FamilySegment[]
+}
+export type TreeLayout = {
+  nodes: TreeNode[]
+  edges: TreeEdge[]
+  connectors: FamilyConnector[]
+  width: number
+  height: number
+}
 
 export type LayoutOpts = { cardW: number; cardH: number; gapX: number; gapY: number }
 
@@ -269,13 +303,133 @@ function buildGenerationItems(
   return items
 }
 
+/**
+ * Step 6: group children into family units by exact parent set, then compute
+ * drops/rail/risers geometry per unit with greedy interval-coloring lane
+ * assignment so overlapping rails in the same row-gap land on distinct y's.
+ * Pure: takes already-computed node positions, does no generation math.
+ */
+function computeFamilyConnectors(
+  peopleIds: string[],
+  parentLinks: { childId: string; parentId: string }[],
+  positions: Map<string, TreeNode>,
+  opts: LayoutOpts
+): FamilyConnector[] {
+  const knownIds = new Set(peopleIds)
+  const { cardW, cardH, gapX, gapY } = opts
+
+  // Group children by their exact sorted parent-id set.
+  const parentsOfChild = new Map<string, Set<string>>()
+  for (const { childId, parentId } of parentLinks) {
+    if (!knownIds.has(childId) || !knownIds.has(parentId)) continue
+    if (!parentsOfChild.has(childId)) parentsOfChild.set(childId, new Set())
+    parentsOfChild.get(childId)!.add(parentId)
+  }
+  const unitsByKey = new Map<string, { parentIds: string[]; childIds: string[] }>()
+  for (const [childId, parentSet] of parentsOfChild) {
+    const parentIds = [...parentSet].sort()
+    const key = parentIds.join(',')
+    if (!unitsByKey.has(key)) unitsByKey.set(key, { parentIds, childIds: [] })
+    unitsByKey.get(key)!.childIds.push(childId)
+  }
+
+  type Prepared = {
+    parentIds: string[]
+    childIds: string[]
+    childRowTopY: number
+    xmin: number
+    xmax: number
+    parentXs: { x: number; bottomY: number }[]
+    childXs: { x: number; topY: number }[]
+  }
+
+  const prepared: Prepared[] = []
+  for (const unit of unitsByKey.values()) {
+    const parentXs = unit.parentIds.map((id) => {
+      const p = positions.get(id)!
+      return { x: p.x + cardW / 2, bottomY: p.y + cardH }
+    })
+    const childXs = unit.childIds.map((id) => {
+      const c = positions.get(id)!
+      return { x: c.x + cardW / 2, topY: c.y }
+    })
+    const childRowTopY = Math.min(...childXs.map((c) => c.topY))
+    const allXs = [...parentXs.map((p) => p.x), ...childXs.map((c) => c.x)]
+    prepared.push({
+      parentIds: unit.parentIds,
+      childIds: unit.childIds,
+      childRowTopY,
+      xmin: Math.min(...allXs),
+      xmax: Math.max(...allXs),
+      parentXs,
+      childXs,
+    })
+  }
+
+  // Deterministic processing order regardless of Map/object iteration order,
+  // so identical input always produces identical connector output: by gap
+  // (childRowTopY), then rail xmin (also the order greedy interval-coloring
+  // needs), then parentIds as a final tiebreaker.
+  prepared.sort((a, b) => {
+    if (a.childRowTopY !== b.childRowTopY) return a.childRowTopY - b.childRowTopY
+    if (a.xmin !== b.xmin) return a.xmin - b.xmin
+    return a.parentIds.join(',').localeCompare(b.parentIds.join(','))
+  })
+
+  // Greedy interval coloring per gap: lowest lane index whose last-assigned
+  // xmax (padded by gapX) doesn't overlap this unit's xmin. Capped at 4
+  // lanes; beyond that, wrap (5+ overlapping families in one gap is out of
+  // scope, per the brief).
+  const MAX_LANES = 4
+  const laneEndXByGap = new Map<number, number[]>()
+
+  const connectors: FamilyConnector[] = []
+  for (const unit of prepared) {
+    let laneEndX = laneEndXByGap.get(unit.childRowTopY)
+    if (!laneEndX) {
+      laneEndX = []
+      laneEndXByGap.set(unit.childRowTopY, laneEndX)
+    }
+
+    let lane = -1
+    for (let i = 0; i < laneEndX.length; i++) {
+      if (laneEndX[i] + gapX <= unit.xmin) {
+        lane = i
+        break
+      }
+    }
+    if (lane === -1) {
+      if (laneEndX.length < MAX_LANES) {
+        lane = laneEndX.length
+        laneEndX.push(-Infinity)
+      } else {
+        lane = laneEndX.length % MAX_LANES
+      }
+    }
+    laneEndX[lane] = Math.max(laneEndX[lane], unit.xmax)
+
+    const railY = unit.childRowTopY - gapY + 24 + lane * 16
+
+    connectors.push({
+      parentIds: unit.parentIds,
+      childIds: unit.childIds,
+      railY,
+      parentDrops: unit.parentXs.map((p) => ({ x: p.x, y1: p.bottomY, y2: railY })),
+      rail: { x1: unit.xmin, x2: unit.xmax, y: railY },
+      childRisers: unit.childXs.map((c) => ({ x: c.x, y1: railY, y2: c.topY })),
+    })
+  }
+
+  return connectors
+}
+
 export function layoutTree(
   people: { id: string }[],
   parentLinks: { childId: string; parentId: string }[],
   spouseLinks: { personAId: string; personBId: string }[],
   opts: LayoutOpts = DEFAULT_OPTS
 ): TreeLayout {
-  if (people.length === 0) return { nodes: [], edges: [], width: 0, height: 0 }
+  if (people.length === 0) return { nodes: [], edges: [], connectors: [], width: 0, height: 0 }
 
   const { cardW, cardH, gapX, gapY } = opts
   const spacingX = cardW + gapX
@@ -353,12 +507,15 @@ export function layoutTree(
     edges.push({ kind: 'parent', from: parentId, to: childId })
   }
 
+  const connectors = computeFamilyConnectors(peopleIds, parentLinks, positions, opts)
+
   const maxX = Math.max(...nodes.map((n) => n.x))
   const maxY = Math.max(...nodes.map((n) => n.y))
 
   return {
     nodes,
     edges,
+    connectors,
     width: maxX + cardW,
     height: maxY + cardH,
   }

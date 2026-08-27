@@ -167,8 +167,9 @@ export function TreeView() {
             width={layout.width}
             height={layout.height}
           >
-            {layout.edges.map((edge, i) => {
-              if (edge.kind === 'spouse') {
+            {layout.edges
+              .filter((edge): edge is Extract<typeof edge, { kind: 'spouse' }> => edge.kind === 'spouse')
+              .map((edge, i) => {
                 const a = layout.nodes.find((n) => n.id === edge.a)
                 const b = layout.nodes.find((n) => n.id === edge.b)
                 if (!a || !b) return null
@@ -183,23 +184,43 @@ export function TreeView() {
                     strokeWidth={2}
                   />
                 )
-              }
-              const from = layout.nodes.find((n) => n.id === edge.from)
-              const to = layout.nodes.find((n) => n.id === edge.to)
-              if (!from || !to) return null
-              const startX = from.x + CARD_W / 2
-              const startY = from.y + CARD_H
-              const endX = to.x + CARD_W / 2
-              const endY = to.y
-              const midY = (startY + endY) / 2
+              })}
+
+            {layout.connectors.map((connector) => {
+              const key = `${connector.parentIds.join('+')}>${connector.childIds.join('+')}`
               return (
-                <path
-                  key={`p-${i}`}
-                  d={`M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`}
-                  fill="none"
-                  stroke="#6a594b88"
-                  strokeWidth={2}
-                />
+                <g key={key}>
+                  {connector.parentDrops.map((seg, i) => (
+                    <line
+                      key={`drop-${i}`}
+                      x1={seg.x}
+                      y1={seg.y1}
+                      x2={seg.x}
+                      y2={seg.y2}
+                      stroke="#6a594b88"
+                      strokeWidth={2}
+                    />
+                  ))}
+                  <line
+                    x1={connector.rail.x1}
+                    y1={connector.rail.y}
+                    x2={connector.rail.x2}
+                    y2={connector.rail.y}
+                    stroke="#6a594b88"
+                    strokeWidth={2}
+                  />
+                  {connector.childRisers.map((seg, i) => (
+                    <line
+                      key={`riser-${i}`}
+                      x1={seg.x}
+                      y1={seg.y1}
+                      x2={seg.x}
+                      y2={seg.y2}
+                      stroke="#6a594b88"
+                      strokeWidth={2}
+                    />
+                  ))}
+                </g>
               )
             })}
           </svg>
