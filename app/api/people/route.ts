@@ -9,9 +9,29 @@ import {
   type NewPersonInput,
 } from '@/lib/audit'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const { error } = await requireUser()
   if (error) return error
+
+  const full = new URL(req.url).searchParams.get('full') === '1'
+
+  if (full) {
+    const [people, parentLinks, spouseLinks] = await Promise.all([
+      prisma.person.findMany({ where: { deletedAt: null }, orderBy: { displayName: 'asc' } }),
+      prisma.parentChild.findMany({
+        where: { child: { deletedAt: null }, parent: { deletedAt: null } },
+      }),
+      prisma.spouse.findMany({
+        where: { personA: { deletedAt: null }, personB: { deletedAt: null } },
+      }),
+    ])
+    const peopleLite = await Promise.all(people.map(personToLite))
+    return NextResponse.json({
+      people: peopleLite,
+      parentLinks: parentLinks.map((l) => ({ childId: l.childId, parentId: l.parentId })),
+      spouseLinks: spouseLinks.map((l) => ({ personAId: l.personAId, personBId: l.personBId })),
+    })
+  }
 
   const people = await prisma.person.findMany({
     where: { deletedAt: null },
