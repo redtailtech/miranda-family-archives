@@ -39,6 +39,23 @@
  *  4. x is assigned by walking the ordered generation left-to-right, resolving
  *     overlaps by never placing a node left of (previous node's x + spacing).
  *     y = generation * (cardH + gapY).
+ *  4.5. Bottom-up centering pass (added in the 2026-08-27 tree-centering fix,
+ *     round 3): step 4 alone only pulls children toward already-placed
+ *     parents, so a cluster with no parents of its own (e.g. the eldest
+ *     generation) anchors at the left-to-right walk's starting x instead of
+ *     sitting over its descendants. After step 4 has produced a full set of
+ *     positions, walk generations from (maxGen - 1) down to 0 and re-run the
+ *     non-overlap cursor walk with each item's target now pulled toward the
+ *     mean CENTER x of its own children (already final, since shallower
+ *     generations are processed after deeper ones here) instead of toward
+ *     parents. See `centerParentsOverChildren`'s doc comment for the
+ *     averaged-bidirectional-walk approach and why it can't change
+ *     generation, row membership, or in-row order — only x moves. Run once
+ *     bottom-up (not iterated), since each generation depends only on the
+ *     generation below, which is already final by the time it's processed.
+ *     A final re-normalization then re-zeros min x, since centering can
+ *     shift the whole tree. Must run BEFORE step 6 so connectors read final
+ *     positions.
  *  5. Edges: one 'spouse' edge per couple, one 'parent' edge per ParentChild link.
  *  6. Family connectors (added in the 2026-08-27 tree-fix round 2, connector
  *     routing): children are grouped into "family units" by their exact
@@ -57,6 +74,8 @@
  *     wraparound beyond that (5+ overlapping families in one gap is out of
  *     scope). `edges` is unchanged — `layoutTree` still returns one 'parent'
  *     edge per ParentChild link for callers that don't consume connectors.
+ *     Computed from `positions` AFTER step 4.5, so rails/drops/risers use
+ *     final, centered coordinates.
  */
 
 export type TreeNode = { id: string; x: number; y: number }
@@ -304,6 +323,125 @@ function buildGenerationItems(
 }
 
 /**
+ * Step 4.5: bottom-up centering pass. Pulls each item toward the mean CENTER
+ * x of its own children, mutating `positions` in place, so parents end up
+ * over their descendants instead of anchored at step 4's walk-start x.
+ *
+ * For each generation g from (maxGen - 1) down to 0: items are rebuilt with
+ * `buildGenerationItems` (the SAME clustering step 4 used), fed ids sorted
+ * by their CURRENT x. Because step 4 never overlaps clusters and always
+ * places a cluster's members at contiguous, strictly-increasing x's, sorting
+ * by current x reconstructs the identical left-to-right item order and
+ * identical member-within-item order that step 4 produced — no independent
+ * re-sort, per the brief. Each item's `desired` x is the mean of its
+ * children's center x's (center = x + cardW/2), converted back to a
+ * leftmost-member x by subtracting the item's own center offset, so the
+ * ITEM's center — not its leftmost member — lands on the children's mean
+ * center. Children come from `childrenOfParent`, built once over all
+ * parentLinks (not just gen g+1), which is safe here because every
+ * generation deeper than g has already been finalized by this same
+ * bottom-up loop (or, for maxGen itself, was never touched — it has no
+ * generation below it to center on, so its step-4 positions stand as this
+ * sweep's base case). Items with no children keep their current x.
+ *
+ * The non-overlap cursor walk then runs TWICE and the two results are
+ * averaged, rather than once left-to-right as step 4 does:
+ *   - left-to-right, `startX = max(desired, cursor + spacingX)` — identical
+ *     semantics to step 4.
+ *   - right-to-left, the symmetric mirror: `startX = min(desired, cursor -
+ *     spacingX - itemSpan)`, walking from the last item back to the first.
+ * A single left-to-right walk always resolves a desired-position conflict by
+ * pushing the LATER item rightward, so a run of mutually-crowded items
+ * drifts right of where any of them individually wanted to sit; the mirrored
+ * right-to-left walk drifts the same run left under the same conditions.
+ * Averaging the two cancels that directional bias — chosen over alternatives
+ * (e.g. a single centered relaxation) because it stays a closed-form pass
+ * over the existing cursor-walk primitive rather than an iterative solver.
+ *
+ * Averaging preserves non-overlap PROVABLY, not just empirically: both walks
+ * satisfy the same affine inequality per adjacent pair of items,
+ * `startX_{i+1} >= startX_i + itemSpan_i + spacingX`, and a convex
+ * combination (the 50/50 average) of two sequences that each satisfy a
+ * linear inequality termwise still satisfies it — so the averaged layout is
+ * non-overlapping whenever both source walks are, which they always are
+ * (each is literally step 4's algorithm with a different desired-x input).
+ *
+ * y is copied from the existing position, never recomputed, and
+ * `finalGen`/generation membership is never read for anything but grouping
+ * — so this pass cannot move a node to a different row, and item order is
+ * threaded through unchanged from the current x-order — so it cannot
+ * reorder items within a row either. Only x moves.
+ */
+function centerParentsOverChildren(
+  peopleIds: string[],
+  spouseLinks: { personAId: string; personBId: string }[],
+  childrenOfParent: Map<string, string[]>,
+  finalGen: Map<string, number>,
+  maxGen: number,
+  positions: Map<string, TreeNode>,
+  opts: LayoutOpts
+): void {
+  const { cardW, gapX } = opts
+  const spacingX = cardW + gapX
+
+  for (let g = maxGen - 1; g >= 0; g--) {
+    const genIdsByX = peopleIds
+      .filter((id) => finalGen.get(id) === g)
+      .sort((a, b) => positions.get(a)!.x - positions.get(b)!.x)
+    if (genIdsByX.length === 0) continue
+
+    const items = buildGenerationItems(genIdsByX, spouseLinks)
+
+    const withDesired = items.map((item) => {
+      const childCenterXs: number[] = []
+      const seen = new Set<string>()
+      for (const m of item.members) {
+        for (const cid of childrenOfParent.get(m) ?? []) {
+          if (seen.has(cid)) continue
+          seen.add(cid)
+          const cpos = positions.get(cid)
+          if (cpos) childCenterXs.push(cpos.x + cardW / 2)
+        }
+      }
+      const itemSpan = (item.members.length - 1) * spacingX
+      const itemCenterOffset = cardW / 2 + itemSpan / 2
+      const desired =
+        childCenterXs.length === 0
+          ? positions.get(item.members[0])!.x
+          : childCenterXs.reduce((a, b) => a + b, 0) / childCenterXs.length - itemCenterOffset
+      return { item, desired, itemSpan }
+    })
+
+    // Left-to-right walk: identical semantics to step 4's cursor walk.
+    const ltr: number[] = []
+    let cursor: number | null = null
+    for (const { desired, itemSpan } of withDesired) {
+      const startX: number = cursor === null ? desired : Math.max(desired, cursor + spacingX)
+      ltr.push(startX)
+      cursor = startX + itemSpan
+    }
+
+    // Right-to-left walk: symmetric mirror, from the last item back to the first.
+    const rtl: number[] = new Array(withDesired.length)
+    let rcursor: number | null = null
+    for (let i = withDesired.length - 1; i >= 0; i--) {
+      const { desired, itemSpan } = withDesired[i]
+      const startX: number = rcursor === null ? desired : Math.min(desired, rcursor - spacingX - itemSpan)
+      rtl[i] = startX
+      rcursor = startX
+    }
+
+    withDesired.forEach(({ item }, i) => {
+      const avgStartX = (ltr[i] + rtl[i]) / 2
+      item.members.forEach((id, k) => {
+        const prevY = positions.get(id)!.y
+        positions.set(id, { id, x: avgStartX + k * spacingX, y: prevY })
+      })
+    })
+  }
+}
+
+/**
  * Step 6: group children into family units by exact parent set, then compute
  * drops/rail/risers geometry per unit with greedy interval-coloring lane
  * assignment so overlapping rails in the same row-gap land on distinct y's.
@@ -439,11 +577,14 @@ export function layoutTree(
   const finalGen = computeGenerationsJointFixedPoint(peopleIds, parentLinks, spouseLinks, rawGen)
 
   const parentsOfChild = new Map<string, string[]>()
+  const childrenOfParent = new Map<string, string[]>()
   const knownIds = new Set(peopleIds)
   for (const { childId, parentId } of parentLinks) {
     if (!knownIds.has(childId) || !knownIds.has(parentId)) continue
     if (!parentsOfChild.has(childId)) parentsOfChild.set(childId, [])
     parentsOfChild.get(childId)!.push(parentId)
+    if (!childrenOfParent.has(parentId)) childrenOfParent.set(parentId, [])
+    childrenOfParent.get(parentId)!.push(childId)
   }
 
   const maxGen = Math.max(...peopleIds.map((id) => finalGen.get(id)!))
@@ -492,6 +633,17 @@ export function layoutTree(
         positions.set(id, { id, x: startX + k * spacingX, y })
       })
       cursor = startX + (item.members.length - 1) * spacingX
+    }
+  }
+
+  centerParentsOverChildren(peopleIds, spouseLinks, childrenOfParent, finalGen, maxGen, positions, opts)
+
+  // Re-normalize so min x = 0 — centering can shift the whole tree.
+  const minX = Math.min(...peopleIds.map((id) => positions.get(id)!.x))
+  if (minX !== 0) {
+    for (const id of peopleIds) {
+      const p = positions.get(id)!
+      positions.set(id, { ...p, x: p.x - minX })
     }
   }
 
