@@ -183,3 +183,94 @@ None — all 4 critical/important findings addressed. Implementation now correct
 2. Retries failed chunks with backoff
 3. Cleans up S3 multipart uploads on failure/cancellation
 4. Uploads files with bounded concurrency (3 at a time)
+
+---
+
+## Iteration 3: Abort Handler Fixes
+
+Commit: `(to be created after final fixes)`
+
+### Fix 1: file.meta.key/uploadId Not Set (Critical) — components/uploader.tsx lines 127-130
+
+**Issue:** Abort handlers (`file-removed`, `cancel-all`) read `file.meta.key` and `file.meta.uploadId` but these were never written — only `mediaId` was set. Result: abort silently no-op'd via the guard check, orphaning DB rows + S3 multipart uploads.
+
+**Fix Applied:**
+- Line 127-130: After setting `mediaId`, also set `key` and `uploadId` in `file.meta`:
+  ```typescript
+  const meta = file.meta as Record<string, unknown>
+  meta.mediaId = mediaId
+  meta.key = key
+  meta.uploadId = uploadId
+  ```
+
+**Verification:** All three values now flow to abort handlers and are accessible.
+
+### Fix 2: Double-Abort Prevention (Critical) — components/uploader.tsx lines 15, 95-103
+
+**Issue:** Multiple abort paths (failure + file-removed, or cancel-all after success) could send duplicate `/api/uploads/abort` requests for the same upload.
+
+**Fix Applied:**
+- Line 15: Added module-level `abortedMediaIds = new Set<string>()`
+- Lines 95-103: Guard in `abortUpload()`:
+  ```typescript
+  async function abortUpload(mediaId: string | undefined, ...) {
+    if (!mediaId || !key || !uploadId) return
+    // Guard against double-abort
+    if (abortedMediaIds.has(mediaId)) return
+    abortedMediaIds.add(mediaId)
+    // ... proceed with abort
+  }
+  ```
+
+### Fix 3: 4xx Error Non-Retry (Minor) — components/uploader.tsx lines 12-20, 70-76
+
+**Issue:** Retry logic treated all errors equally, including 4xx from sign-part (client errors), which should fail immediately without wasting retry attempts and delays.
+
+**Fix Applied:**
+- Lines 12-20: Created custom `ApiError` class with status code:
+  ```typescript
+  class ApiError extends Error {
+    constructor(public status: number, message: string) {
+      super(message)
+    }
+  }
+  ```
+- Modified `api()` to throw `ApiError` with status
+- Lines 70-76: In `uploadChunkWithRetry()`, check for 4xx and fail immediately:
+  ```typescript
+  if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
+    throw err
+  }
+  ```
+  Only retry on network errors and 5xx.
+
+---
+
+## Final Verification Results
+
+### Build
+```
+npm run build ✅ PASS
+- Compiled successfully in 520ms
+- All routes properly registered including /upload
+```
+
+### TypeScript Check
+```
+npx tsc --noEmit ✅ PASS
+- No type errors
+```
+
+### Lint Check
+```
+npm run lint ✅ PASS
+- All ESLint rules satisfied
+```
+
+## All Findings Resolved
+- ✅ Fix 1 (Events): Success/failure properly reported
+- ✅ Fix 2 (Retry): Chunk-level retry with backoff
+- ✅ Fix 3a (Abort): key/uploadId now set in file.meta
+- ✅ Fix 3b (Abort): Double-abort prevented via Set
+- ✅ Fix 4 (Concurrency): 3-file concurrent processing
+- ✅ Fix 3c (4xx): Non-retryable errors fail immediately

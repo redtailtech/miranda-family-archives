@@ -12,13 +12,25 @@ const MAX_CONCURRENT_FILES = 3
 const MAX_RETRIES = 3
 const RETRY_DELAYS = [1000, 3000] // ms delays between retries
 
+// Track already-aborted uploads to prevent double-abort
+const abortedMediaIds = new Set<string>()
+
+class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message)
+  }
+}
+
 async function api(path: string, body: unknown) {
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error((await res.json()).error ?? `HTTP ${res.status}`)
+  if (!res.ok) {
+    const message = (await res.json()).error ?? `HTTP ${res.status}`
+    throw new ApiError(res.status, message)
+  }
   return res.json()
 }
 
@@ -67,9 +79,13 @@ async function uploadChunkWithRetry(
       })
       return { etag }
     } catch (err) {
+      // Don't retry 4xx errors from sign-part (client errors are not retryable)
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
+        throw err
+      }
       const isLastAttempt = attempt === MAX_RETRIES - 1
       if (isLastAttempt) throw err
-      // Wait before retrying
+      // Wait before retrying (network errors or 5xx)
       const delay = RETRY_DELAYS[attempt] ?? 5000
       await new Promise((resolve) => setTimeout(resolve, delay))
     }
@@ -83,6 +99,9 @@ async function abortUpload(
   uploadId: string | undefined,
 ) {
   if (!mediaId || !key || !uploadId) return
+  // Guard against double-abort
+  if (abortedMediaIds.has(mediaId)) return
+  abortedMediaIds.add(mediaId)
   try {
     await api('/api/uploads/abort', { mediaId, key, uploadId })
   } catch (err) {
@@ -115,7 +134,10 @@ async function processFilesWithConcurrency(
       key = response.key
       uploadId = response.uploadId
 
-      ;(file.meta as Record<string, unknown>).mediaId = mediaId
+      const meta = file.meta as Record<string, unknown>
+      meta.mediaId = mediaId
+      meta.key = key
+      meta.uploadId = uploadId
 
       const parts: Array<{ PartNumber: number; ETag: string }> = []
       const fileData = file.data as Blob
