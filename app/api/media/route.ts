@@ -58,7 +58,10 @@ export function buildMediaWhere(
     ...(decadeStart !== null ? { dateYear: { gte: decadeStart, lte: decadeStart + 9 } } : {}),
     ...(albumId ? { albumItems: { some: { albumId } } } : {}),
     ...(personId ? { people: { some: { personId } } } : {}),
-    ...(params.backs === '1' ? { backOfId: { not: null } } : { backOfId: null }),
+    // Explicit personal picks always show, even backs: a favorited back must
+    // still appear on /favorites, so the default backs-are-hidden exclusion
+    // only applies when the viewer isn't asking for their favorites.
+    ...(params.backs === '1' ? { backOfId: { not: null } } : favoriteOnly ? {} : { backOfId: null }),
   }
 }
 

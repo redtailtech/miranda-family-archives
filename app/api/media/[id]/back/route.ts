@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'that photo already has a back' }, { status: 409 })
   if (front.backItem && front.backItem.deletedAt !== null)
     return NextResponse.json(
-      { error: 'that photo already has a back in Deleted items — an admin can restore or remove it' },
+      { error: 'that photo already has a back in Deleted items — an admin can restore it first' },
       { status: 409 }
     )
 

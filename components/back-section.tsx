@@ -47,24 +47,36 @@ export function BackSection({ item }: { item: MediaItemDTO }) {
   }
 
   if (item.back) {
+    const back = item.back
+    // The back occupies the slot the moment it's attached, whatever state
+    // it's in — surface it (and let it be removed) whether it's still
+    // processing, failed, or ready, rather than only showing/removable once
+    // READY. This is also what makes onUploaded's router.refresh() show
+    // useful feedback instead of silently re-inviting an add.
     return (
       <div className="mt-6 rounded-xl border bg-surface p-4">
         <h2 className="mb-3 text-2xl font-bold">Back of this photo</h2>
         <div className="flex flex-wrap items-center gap-4">
-          <Link href={`/media/${item.back.id}`} className="block shrink-0">
-            {item.back.thumbUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={item.back.thumbUrl}
-                alt={item.back.title ?? item.back.filename}
-                className="h-24 min-h-24 w-24 min-w-24 rounded-lg object-cover"
-              />
-            ) : (
-              <span className="flex h-24 min-h-24 w-24 min-w-24 items-center justify-center rounded-lg bg-wash text-base text-ink-soft">
-                No preview
-              </span>
-            )}
-          </Link>
+          {back.status === 'READY' ? (
+            <Link href={`/media/${back.id}`} className="block shrink-0">
+              {back.thumbUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={back.thumbUrl}
+                  alt={back.title ?? back.filename}
+                  className="h-24 min-h-24 w-24 min-w-24 rounded-lg object-cover"
+                />
+              ) : (
+                <span className="flex h-24 min-h-24 w-24 min-w-24 items-center justify-center rounded-lg bg-wash text-base text-ink-soft">
+                  No preview
+                </span>
+              )}
+            </Link>
+          ) : back.status === 'FAILED' ? (
+            <p className="flex-1 text-lg">The back photo failed to process.</p>
+          ) : (
+            <p className="flex-1 text-lg">The back is still processing — check back in a minute.</p>
+          )}
           <Button variant="destructive" onClick={handleRemove} disabled={removing}>
             {removing ? 'Removing…' : 'Remove the back'}
           </Button>

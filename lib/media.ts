@@ -57,7 +57,7 @@ export type MediaItemDTO = {
   duplicateOfId: string | null
   duplicateOf?: { id: string; title: string | null; filename: string; thumbUrl: string | null } | null
   backOfId: string | null
-  back?: { id: string; title: string | null; filename: string; thumbUrl: string | null } | null
+  back?: { id: string; title: string | null; filename: string; thumbUrl: string | null; status: string } | null
   backOf?: { id: string; title: string | null; filename: string } | null
 }
 
@@ -126,12 +126,21 @@ export async function mediaItemToDTO(
       })
       dto.backOf = front ? { id: front.id, title: front.title, filename: front.originalFilename } : null
     } else {
+      // Not filtered to status: 'READY' — a back that's still processing or
+      // failed still occupies the slot and must stay visible/removable on
+      // the front's page (see BackSection), not silently disappear.
       const back = await prisma.mediaItem.findFirst({
-        where: { backOfId: item.id, deletedAt: null, status: 'READY' },
-        select: { id: true, title: true, originalFilename: true, thumbKey: true },
+        where: { backOfId: item.id, deletedAt: null },
+        select: { id: true, title: true, originalFilename: true, thumbKey: true, status: true },
       })
       dto.back = back
-        ? { id: back.id, title: back.title, filename: back.originalFilename, thumbUrl: back.thumbKey ? await signGetUrl(back.thumbKey) : null }
+        ? {
+            id: back.id,
+            title: back.title,
+            filename: back.originalFilename,
+            thumbUrl: back.thumbKey ? await signGetUrl(back.thumbKey) : null,
+            status: back.status,
+          }
         : null
     }
   }

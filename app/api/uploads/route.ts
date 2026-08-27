@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { createMultipart } from '@/lib/s3'
 import { mediaTypeForMime, originalKey, MAX_UPLOAD_BYTES } from '@/lib/media'
@@ -33,23 +34,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'that photo already has a back' }, { status: 409 })
     if (front.backItem && front.backItem.deletedAt !== null)
       return NextResponse.json(
-        { error: 'that photo already has a back in Deleted items — an admin can restore or remove it' },
+        { error: 'that photo already has a back in Deleted items — an admin can restore it first' },
         { status: 409 }
       )
   }
 
-  const item = await prisma.mediaItem.create({
-    data: {
-      type: mediaType,
-      status: 'UPLOADING',
-      originalKey: '', // set below once we have the id
-      originalFilename: filename,
-      originalSize: BigInt(size),
-      mimeType: type,
-      uploadedById: user.id,
-      ...(backOfId ? { backOfId } : {}),
-    },
-  })
+  // The checks above (front live, slot free) and this create aren't
+  // atomic — two uploads can race to claim the same front's back slot. The
+  // backOfId column is unique, so a concurrent winner surfaces here as a
+  // P2002 rather than corrupting the "exactly one back" invariant.
+  let item
+  try {
+    item = await prisma.mediaItem.create({
+      data: {
+        type: mediaType,
+        status: 'UPLOADING',
+        originalKey: '', // set below once we have the id
+        originalFilename: filename,
+        originalSize: BigInt(size),
+        mimeType: type,
+        uploadedById: user.id,
+        ...(backOfId ? { backOfId } : {}),
+      },
+    })
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')
+      return NextResponse.json({ error: 'that photo already has a back' }, { status: 409 })
+    throw err
+  }
   const key = originalKey(item.id, filename)
   await prisma.mediaItem.update({ where: { id: item.id }, data: { originalKey: key } })
   const { uploadId } = await createMultipart(key, type)
