@@ -87,6 +87,7 @@ function DigestToggle({ initialEnabled }: { initialEnabled: boolean }) {
       </p>
       <div className="flex flex-wrap items-center gap-4">
         <Switch
+          size="lg"
           checked={digestEnabled}
           onCheckedChange={toggle}
           disabled={state === 'saving'}
