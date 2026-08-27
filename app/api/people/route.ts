@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/require-user'
 import { personToLite } from '@/lib/people'
-import { createPersonWithAudit, validPersonInput, type NewPersonInput } from '@/lib/audit'
+import {
+  createPersonWithAudit,
+  validPersonInput,
+  EDITABLE_PERSON_FIELDS,
+  type NewPersonInput,
+} from '@/lib/audit'
 
 export async function GET() {
   const { error } = await requireUser()
@@ -31,6 +36,10 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
   }
+
+  const unknown = Object.keys(body).filter((k) => !(EDITABLE_PERSON_FIELDS as readonly string[]).includes(k))
+  if (unknown.length > 0)
+    return NextResponse.json({ error: `unknown fields: ${unknown.join(', ')}` }, { status: 400 })
 
   if (!('displayName' in body))
     return NextResponse.json({ error: 'displayName is required' }, { status: 400 })

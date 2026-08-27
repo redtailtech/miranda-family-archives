@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/require-user'
 import { addParentWithAudit, removeParentWithAudit } from '@/lib/audit'
+import { safeErrorResponse } from '@/lib/http-errors'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { user, error } = await requireUser()
@@ -19,8 +20,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     await addParentWithAudit(id, parentId, user!.id)
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500
-    return NextResponse.json({ error: (err as Error).message }, { status })
+    const { status, message } = safeErrorResponse(err)
+    return NextResponse.json({ error: message }, { status })
   }
   return NextResponse.json({ ok: true })
 }
@@ -35,8 +36,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     await removeParentWithAudit(id, parentId, user!.id)
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500
-    return NextResponse.json({ error: (err as Error).message }, { status })
+    const { status, message } = safeErrorResponse(err)
+    return NextResponse.json({ error: message }, { status })
   }
   return NextResponse.json({ ok: true })
 }
