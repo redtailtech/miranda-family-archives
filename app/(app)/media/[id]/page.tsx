@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { mediaItemToDTO } from '@/lib/media'
 import { RetryButton } from '@/components/retry-button'
+import { DetailTabs } from '@/components/detail-tabs'
+import { MediaEditForm } from '@/components/media-edit-form'
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -50,11 +52,22 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         {dto.status === 'FAILED' && <RetryButton id={dto.id} />}
       </div>
 
-      <dl className="mt-8 grid grid-cols-2 gap-2 text-lg">
-        <dt className="font-semibold">Uploaded by</dt><dd>{dto.uploadedBy?.name ?? 'Unknown'}</dd>
-        <dt className="font-semibold">Uploaded</dt><dd>{new Date(dto.createdAt).toLocaleDateString()}</dd>
-        <dt className="font-semibold">File</dt><dd>{dto.originalFilename} ({dto.mimeType})</dd>
-      </dl>
+      <DetailTabs
+        details={
+          <>
+            <dl className="grid grid-cols-2 gap-2 text-lg">
+              <dt className="font-semibold">Uploaded by</dt><dd>{dto.uploadedBy?.name ?? 'Unknown'}</dd>
+              <dt className="font-semibold">Uploaded</dt><dd>{new Date(dto.createdAt).toLocaleDateString()}</dd>
+              <dt className="font-semibold">File</dt><dd>{dto.originalFilename} ({dto.mimeType})</dd>
+            </dl>
+            <div className="mt-8">
+              <MediaEditForm item={dto} />
+            </div>
+          </>
+        }
+        advanced={<p className="text-lg">Coming right up…</p>}
+        history={<p className="text-lg">Coming right up…</p>}
+      />
     </div>
   )
 }
