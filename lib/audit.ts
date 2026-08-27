@@ -30,12 +30,35 @@ function fieldDiff(
 
 /** Validate the flexible-date invariant: day needs month, month needs year. */
 export function validDateParts(year: number | null, month: number | null, day: number | null): boolean {
+  if (year != null && !Number.isInteger(year)) return false
+  if (month != null && !Number.isInteger(month)) return false
+  if (day != null && !Number.isInteger(day)) return false
   if (day != null && month == null) return false
   if (month != null && year == null) return false
   if (year != null && (year < 1000 || year > 3000)) return false
   if (month != null && (month < 1 || month > 12)) return false
   if (day != null && (day < 1 || day > 31)) return false
   return true
+}
+
+/**
+ * Validate the runtime type of a single editable field's incoming value.
+ * Returns true when `value` is an acceptable type for `field`, false otherwise.
+ * (Semantic date-combination rules are handled separately by `validDateParts`.)
+ */
+export function validFieldValue(field: EditableMediaField, value: unknown): boolean {
+  switch (field) {
+    case 'title':
+    case 'description':
+    case 'location':
+      return value === null || typeof value === 'string'
+    case 'dateYear':
+    case 'dateMonth':
+    case 'dateDay':
+      return value === null || (typeof value === 'number' && Number.isInteger(value))
+    case 'dateIsApproximate':
+      return typeof value === 'boolean'
+  }
 }
 
 export async function updateMediaWithAudit(

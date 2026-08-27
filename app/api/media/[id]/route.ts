@@ -2,7 +2,14 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { mediaItemToDTO } from '@/lib/media'
-import { updateMediaWithAudit, softDeleteMediaWithAudit, validDateParts, EDITABLE_MEDIA_FIELDS } from '@/lib/audit'
+import {
+  updateMediaWithAudit,
+  softDeleteMediaWithAudit,
+  validDateParts,
+  validFieldValue,
+  EDITABLE_MEDIA_FIELDS,
+  type EditableMediaField,
+} from '@/lib/audit'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth()
@@ -22,17 +29,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const user = await prisma.user.findUnique({ where: { clerkId: userId } })
   if (!user) return NextResponse.json({ error: 'no user record' }, { status: 403 })
   const { id } = await params
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
+  }
 
   const unknown = Object.keys(body).filter((k) => !(EDITABLE_MEDIA_FIELDS as readonly string[]).includes(k))
   if (unknown.length > 0)
     return NextResponse.json({ error: `unknown fields: ${unknown.join(', ')}` }, { status: 400 })
 
+  for (const key of Object.keys(body)) {
+    const field = key as EditableMediaField
+    if (!validFieldValue(field, body[field]))
+      return NextResponse.json({ error: `invalid value for ${field}` }, { status: 400 })
+  }
+
   const current = await prisma.mediaItem.findFirst({ where: { id, deletedAt: null } })
   if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const year = 'dateYear' in body ? body.dateYear : current.dateYear
-  const month = 'dateMonth' in body ? body.dateMonth : current.dateMonth
-  const day = 'dateDay' in body ? body.dateDay : current.dateDay
+  const year = ('dateYear' in body ? body.dateYear : current.dateYear) as number | null
+  const month = ('dateMonth' in body ? body.dateMonth : current.dateMonth) as number | null
+  const day = ('dateDay' in body ? body.dateDay : current.dateDay) as number | null
   if (!validDateParts(year, month, day))
     return NextResponse.json({ error: 'invalid date: a day needs a month, a month needs a year' }, { status: 400 })
 
