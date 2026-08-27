@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
+/*
+ * Miranda Family Archives — "The Mounted Print"
+ *
+ * Warm archival identity: prints (surface) mounted on album paper (paper),
+ * written in deep archival ink, with the amber of a photo corner as the one
+ * accent. All contrast pairs are ≥4.5:1 against the surfaces they sit on.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf7ef;
+  --foreground: #322218;
 }
 
 @theme inline {
@@ -10,17 +18,59 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@theme {
+  /* Core palette */
+  --color-paper: #faf7ef; /* album page — app background */
+  --color-surface: #fffdf9; /* the print — cards, inputs, nav */
+  --color-ink: #322218; /* archival ink — body text, primary actions (12.4:1 on paper) */
+  --color-ink-soft: #6a594b; /* faded ink — secondary text (6.1:1 on paper) */
+  --color-line: #e4d5bf; /* ruled lines — borders, dividers */
+  --color-wash: #f2e9d8; /* parchment wash — hovers, tints, tile backgrounds */
+  --color-sepia: #4e3a2a; /* deep sepia — primary hover */
+  --color-amber: #a05e03; /* Kodachrome amber — the accent (5.1:1 with white) */
+  --color-amber-deep: #7a4a05; /* darker amber — badges (7.5:1 with white) */
+
+  /* Remap the stock utilities the app already uses so every surface —
+     including screens outside this polish pass — stays on-palette. */
+  --color-black: #322218;
+  --color-white: #fffdf9;
+  --color-red-700: #9c2f1e; /* warm brick — error text (6.9:1 on paper) */
+  --color-red-100: #f6e0d6;
+  --color-green-600: #4a7c33; /* leaf green — switch "on" */
+  --color-green-700: #3d6b2a; /* success text (5.8:1 on paper) */
+}
+
+@layer base {
+  html {
+    color-scheme: light;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Bare `border` utilities pick up the ruled-line color. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-line);
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+    /* 18px floor for body copy — grandparent-readable by default. */
+    font-size: 1.125rem;
+  }
+
+  h1,
+  h2 {
+    font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+    letter-spacing: -0.015em;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-amber);
+    outline-offset: 2px;
+  }
 }

@@ -110,7 +110,9 @@ export function TreeView() {
   if (errored)
     return <p className="text-lg text-red-700">Couldn&apos;t load the tree — refresh to try again.</p>
   if (!data || data.people.length === 0 || !layout)
-    return <p className="text-xl">No people yet — add the first family member.</p>
+    return (
+      <p className="text-xl">No one here yet — add the first family member to start the tree.</p>
+    )
 
   return (
     <div>
@@ -118,7 +120,7 @@ export function TreeView() {
         <button
           type="button"
           onClick={() => setZoom((z) => clampZoom(z * 1.2))}
-          className="rounded-lg border px-3 py-2 text-lg"
+          className="flex h-11 w-11 items-center justify-center rounded-lg border border-ink/25 bg-surface text-xl hover:bg-wash"
           aria-label="Zoom in"
         >
           +
@@ -126,12 +128,16 @@ export function TreeView() {
         <button
           type="button"
           onClick={() => setZoom((z) => clampZoom(z / 1.2))}
-          className="rounded-lg border px-3 py-2 text-lg"
+          className="flex h-11 w-11 items-center justify-center rounded-lg border border-ink/25 bg-surface text-xl hover:bg-wash"
           aria-label="Zoom out"
         >
           −
         </button>
-        <button type="button" onClick={resetView} className="rounded-lg border px-3 py-2 text-lg">
+        <button
+          type="button"
+          onClick={resetView}
+          className="flex h-11 items-center rounded-lg border border-ink/25 bg-surface px-4 text-lg hover:bg-wash"
+        >
           Fit
         </button>
       </div>
@@ -142,7 +148,7 @@ export function TreeView() {
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerLeave={endDrag}
-        className={`relative h-[70vh] w-full overflow-hidden rounded-xl border bg-black/[0.02] ${
+        className={`relative h-[70vh] w-full overflow-hidden rounded-xl border bg-wash/50 ${
           dragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
         style={{ touchAction: 'none' }}
@@ -173,7 +179,7 @@ export function TreeView() {
                     y1={a.y + CARD_H / 2}
                     x2={b.x}
                     y2={b.y + CARD_H / 2}
-                    stroke="#00000055"
+                    stroke="#6a594b88"
                     strokeWidth={2}
                   />
                 )
@@ -191,7 +197,7 @@ export function TreeView() {
                   key={`p-${i}`}
                   d={`M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`}
                   fill="none"
-                  stroke="#00000055"
+                  stroke="#6a594b88"
                   strokeWidth={2}
                 />
               )
@@ -205,13 +211,13 @@ export function TreeView() {
               <Link
                 key={node.id}
                 href={`/people/${node.id}`}
-                className="absolute flex items-center gap-2 overflow-hidden rounded-xl border bg-white p-2 shadow-sm hover:bg-black/5"
+                className="absolute flex items-center gap-2 overflow-hidden rounded-xl border bg-surface p-2 shadow-sm hover:bg-wash"
                 style={{ left: node.x, top: node.y, width: CARD_W, height: CARD_H }}
               >
                 <PersonAvatar person={person} size="sm" />
                 <div className="min-w-0">
                   <p className="truncate text-base font-semibold">{person.displayName}</p>
-                  <p className="truncate text-sm text-black/60">
+                  <p className="truncate text-sm text-ink-soft">
                     {person.birthYear ?? '?'}
                     {person.deathYear ? `–${person.deathYear}` : ''}
                   </p>

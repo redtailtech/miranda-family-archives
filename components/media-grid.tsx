@@ -76,14 +76,18 @@ export function MediaGrid({ query }: { query?: string } = {}) {
 
   if (done && !errored && items.length === 0) {
     if (query?.includes('favorite'))
-      return <p className="text-xl">Nothing here yet — tap the ❤️ on any photo to save it here.</p>
+      return (
+        <p className="text-xl">
+          No favorites yet — tap the ❤️ on any photo you love and it will be saved here.
+        </p>
+      )
     if (query)
-      return <p className="text-xl">No matches — try different search or filters.</p>
+      return <p className="text-xl">No photos match — try a different search or clear a filter.</p>
     return (
       <p className="text-xl">
-        Nothing here yet —{' '}
-        <Link href="/upload" className="underline">
-          upload your first photos
+        The archive is ready for its first memories —{' '}
+        <Link href="/upload" className="font-medium underline">
+          upload the first photos
         </Link>
         .
       </p>
@@ -112,27 +116,27 @@ export function MediaTile({ item }: { item: MediaItemDTO }) {
   return (
     <Link
       href={`/media/${item.id}`}
-      className="relative block aspect-square overflow-hidden rounded-xl bg-black/5"
+      className="relative block aspect-square overflow-hidden rounded-xl bg-wash"
     >
       {item.thumbUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.thumbUrl} alt={item.title ?? item.originalFilename} className="h-full w-full object-cover" />
       ) : (
-        <span className="flex h-full items-center justify-center p-2 text-center text-sm">
+        <span className="flex h-full items-center justify-center p-2 text-center text-base">
           {item.status === 'FAILED' ? (
             <span className="rounded-full bg-red-100 px-3 py-1 text-red-700">Failed</span>
           ) : (
-            <span className="rounded-full bg-black/10 px-3 py-1">
+            <span className="rounded-full bg-line px-3 py-1 text-ink-soft">
               {item.status === 'UPLOADING' ? 'Uploading…' : 'Processing…'}
             </span>
           )}
         </span>
       )}
       {item.type === 'DOCUMENT' && (
-        <span aria-label="document" className="absolute right-2 top-2 rounded bg-white/80 px-1">📄</span>
+        <span aria-label="document" className="absolute right-2 top-2 rounded-md bg-surface/90 px-1.5 py-0.5">📄</span>
       )}
       {item.heartCount > 0 && (
-        <span className="absolute bottom-2 left-2 rounded bg-white/80 px-1 text-sm">
+        <span className="absolute bottom-2 left-2 rounded-md bg-surface/90 px-1.5 py-0.5 text-base">
           ❤️ {item.heartCount}
         </span>
       )}

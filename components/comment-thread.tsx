@@ -95,15 +95,15 @@ export function CommentThread({ mediaId }: { mediaId: string }) {
         <p className="text-lg text-red-700">Couldn&apos;t load comments — refresh to try again.</p>
       )}
       {!loading && !loadError && comments.length === 0 && (
-        <p className="text-lg">No comments yet — share a memory.</p>
+        <p className="text-lg">No comments yet — be the first to share a memory about this one.</p>
       )}
       {!loading && !loadError && comments.length > 0 && (
         <ul className="grid gap-3">
           {comments.map((c) => (
-            <li key={c.id} className="rounded-lg border p-4">
+            <li key={c.id} className="rounded-xl border bg-surface p-4">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold">{c.user.name}</span>
-                <span className="text-sm text-black/60">{new Date(c.createdAt).toLocaleString()}</span>
+                <span className="text-base text-ink-soft">{new Date(c.createdAt).toLocaleString()}</span>
               </div>
               <p className="mt-1 whitespace-pre-wrap text-lg">{c.body}</p>
               {c.canDelete && (
@@ -111,7 +111,7 @@ export function CommentThread({ mediaId }: { mediaId: string }) {
                   type="button"
                   onClick={() => deleteComment(c.id)}
                   disabled={deletingId === c.id}
-                  className="mt-2 text-red-700 underline disabled:opacity-50"
+                  className="mt-1 -ml-2 inline-flex min-h-11 items-center rounded-lg px-2 text-lg text-red-700 underline disabled:opacity-50"
                 >
                   {deletingId === c.id ? 'Deleting…' : 'Delete'}
                 </button>
@@ -131,7 +131,7 @@ export function CommentThread({ mediaId }: { mediaId: string }) {
         <label className="grid gap-1 text-lg">
           Add a comment
           <textarea
-            className="w-full rounded-lg border px-4 py-3 text-lg"
+            className="w-full rounded-xl border border-ink/25 bg-surface px-4 py-3 text-lg placeholder:text-ink-soft/70"
             rows={3}
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -142,7 +142,7 @@ export function CommentThread({ mediaId }: { mediaId: string }) {
           <button
             type="submit"
             disabled={posting || !body.trim()}
-            className="rounded-xl bg-black px-6 py-3 text-lg text-white disabled:opacity-50"
+            className="rounded-xl bg-ink px-6 py-3 text-lg font-medium text-paper hover:bg-sepia disabled:opacity-50"
           >
             {posting ? 'Posting…' : 'Add a comment'}
           </button>

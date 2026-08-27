@@ -6,6 +6,8 @@ export type AlbumDTO = {
   name: string
   description: string | null
   itemCount: number
+  /** Media id of the item currently acting as the album cover (explicit pick, or first item). */
+  coverMediaId: string | null
   coverThumbUrl: string | null
   createdAt: string
 }
@@ -23,6 +25,7 @@ export async function albumToDTO(album: AlbumWithItems): Promise<AlbumDTO> {
     name: album.name,
     description: album.description,
     itemCount: live.length,
+    coverMediaId: cover?.id ?? null,
     coverThumbUrl: cover?.thumbKey ? await signGetUrl(cover.thumbKey) : null,
     createdAt: album.createdAt.toISOString(),
   }

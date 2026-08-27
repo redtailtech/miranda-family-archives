@@ -51,66 +51,74 @@ export function LibraryControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q])
 
+  // The timeline is its own chronological view of everything — search and the
+  // filter chips don't apply there, so only the view toggle is shown.
+  const isTimeline = view === 'timeline'
+
   return (
     <div className="mb-6 space-y-3">
-      <input
-        type="search"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search titles, descriptions, locations…"
-        aria-label="Search library"
-        className="w-full rounded-lg border border-black/20 px-3 py-2"
-      />
+      {!isTimeline && (
+        <>
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search titles, descriptions, locations…"
+            aria-label="Search library"
+            className="w-full rounded-xl border border-ink/25 bg-surface px-4 py-3 text-lg placeholder:text-ink-soft/70"
+          />
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by type">
-        <Chip active={!type} onClick={() => updateParams({ type: null })}>
-          All
-        </Chip>
-        <Chip active={type === 'PHOTO'} onClick={() => updateParams({ type: 'PHOTO' })}>
-          Photos
-        </Chip>
-        <Chip active={type === 'DOCUMENT'} onClick={() => updateParams({ type: 'DOCUMENT' })}>
-          Documents
-        </Chip>
-      </div>
-
-      {decades.length > 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by decade">
-          <Chip active={!decade} onClick={() => updateParams({ decade: null })}>
-            All decades
-          </Chip>
-          {decades.map((d) => (
-            <Chip key={d} active={decade === String(d)} onClick={() => updateParams({ decade: String(d) })}>
-              {d}s
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by type">
+            <Chip active={!type} onClick={() => updateParams({ type: null })}>
+              All
             </Chip>
-          ))}
-        </div>
-      )}
-
-      {albums.length > 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by album">
-          <Chip active={!albumId} onClick={() => updateParams({ albumId: null })}>
-            All albums
-          </Chip>
-          {albums.map((a) => (
-            <Chip key={a.id} active={albumId === a.id} onClick={() => updateParams({ albumId: a.id })}>
-              {a.name}
+            <Chip active={type === 'PHOTO'} onClick={() => updateParams({ type: 'PHOTO' })}>
+              Photos
             </Chip>
-          ))}
-        </div>
-      )}
-
-      {people.length > 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by person">
-          <Chip active={!personId} onClick={() => updateParams({ personId: null })}>
-            Everyone
-          </Chip>
-          {people.map((p) => (
-            <Chip key={p.id} active={personId === p.id} onClick={() => updateParams({ personId: p.id })}>
-              {p.displayName}
+            <Chip active={type === 'DOCUMENT'} onClick={() => updateParams({ type: 'DOCUMENT' })}>
+              Documents
             </Chip>
-          ))}
-        </div>
+          </div>
+
+          {decades.length > 0 && (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by decade">
+              <Chip active={!decade} onClick={() => updateParams({ decade: null })}>
+                All decades
+              </Chip>
+              {decades.map((d) => (
+                <Chip key={d} active={decade === String(d)} onClick={() => updateParams({ decade: String(d) })}>
+                  {d}s
+                </Chip>
+              ))}
+            </div>
+          )}
+
+          {albums.length > 0 && (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by album">
+              <Chip active={!albumId} onClick={() => updateParams({ albumId: null })}>
+                All albums
+              </Chip>
+              {albums.map((a) => (
+                <Chip key={a.id} active={albumId === a.id} onClick={() => updateParams({ albumId: a.id })}>
+                  {a.name}
+                </Chip>
+              ))}
+            </div>
+          )}
+
+          {people.length > 0 && (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by person">
+              <Chip active={!personId} onClick={() => updateParams({ personId: null })}>
+                Everyone
+              </Chip>
+              {people.map((p) => (
+                <Chip key={p.id} active={personId === p.id} onClick={() => updateParams({ personId: p.id })}>
+                  {p.displayName}
+                </Chip>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <div className="flex gap-2" role="group" aria-label="View">
@@ -131,8 +139,10 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-full px-3 py-1 text-sm ${
-        active ? 'bg-black text-white' : 'border border-black/20 text-black/70'
+      className={`min-h-11 rounded-full px-4 py-2 text-lg transition-colors ${
+        active
+          ? 'bg-ink font-medium text-paper'
+          : 'border border-ink/25 bg-surface text-ink-soft hover:bg-wash hover:text-ink'
       }`}
     >
       {children}

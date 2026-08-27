@@ -48,8 +48,8 @@ export function PeopleList() {
             onClick={() => setView('list')}
             className={
               view === 'list'
-                ? 'rounded-full bg-black px-4 py-2 text-lg text-white'
-                : 'rounded-full border border-black/20 px-4 py-2 text-lg text-black/60'
+                ? 'min-h-11 rounded-full bg-ink px-4 py-2 text-lg font-medium text-paper'
+                : 'min-h-11 rounded-full border border-ink/25 bg-surface px-4 py-2 text-lg text-ink-soft hover:bg-wash hover:text-ink'
             }
           >
             List
@@ -60,8 +60,8 @@ export function PeopleList() {
             onClick={() => setView('tree')}
             className={
               view === 'tree'
-                ? 'rounded-full bg-black px-4 py-2 text-lg text-white'
-                : 'rounded-full border border-black/20 px-4 py-2 text-lg text-black/60'
+                ? 'min-h-11 rounded-full bg-ink px-4 py-2 text-lg font-medium text-paper'
+                : 'min-h-11 rounded-full border border-ink/25 bg-surface px-4 py-2 text-lg text-ink-soft hover:bg-wash hover:text-ink'
             }
           >
             Tree
@@ -70,14 +70,14 @@ export function PeopleList() {
         <button
           type="button"
           onClick={() => setShowForm(true)}
-          className="rounded-xl bg-black px-6 py-3 text-lg text-white"
+          className="rounded-xl bg-ink px-6 py-3 text-lg font-medium text-paper hover:bg-sepia"
         >
           Add person
         </button>
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-xl border p-6">
+        <div className="mb-6 rounded-xl border bg-surface p-6">
           <PersonForm onCancel={() => setShowForm(false)} />
         </div>
       )}
@@ -91,7 +91,9 @@ export function PeopleList() {
             <p className="text-lg text-red-700">Couldn&apos;t load people — refresh to try again.</p>
           )}
           {!loading && !errored && people.length === 0 && (
-            <p className="text-xl">No one added yet — add the first person.</p>
+            <p className="text-xl">
+              No one here yet — add the first family member to start the tree.
+            </p>
           )}
 
           {!loading && !errored && people.length > 0 && (
@@ -100,13 +102,13 @@ export function PeopleList() {
                 <Link
                   key={p.id}
                   href={`/people/${p.id}`}
-                  className="block overflow-hidden rounded-xl border p-4 text-center"
+                  className="block overflow-hidden rounded-xl border bg-surface p-4 text-center shadow-sm transition-shadow hover:shadow-md"
                 >
                   <div className="mb-3 flex justify-center">
                     <PersonAvatar person={p} size="lg" />
                   </div>
                   <p className="truncate text-lg font-semibold">{p.displayName}</p>
-                  <p className="text-black/60">
+                  <p className="text-ink-soft">
                     {p.tagCount} {p.tagCount === 1 ? 'photo' : 'photos'}
                   </p>
                 </Link>

@@ -47,16 +47,20 @@ export function TimelineView() {
 
   const isEmpty = data && data.decades.length === 0 && data.undated.length === 0
   if (isEmpty)
-    return <p className="text-xl">Nothing here yet — photos will appear here once they&apos;re dated.</p>
+    return (
+      <p className="text-xl">
+        The timeline is empty so far — upload photos and they&apos;ll take their place in time.
+      </p>
+    )
 
   return (
     <div>
       {data!.decades.map((d) => (
         <section key={d.decade}>
-          <h2 className="sticky top-0 z-10 bg-white py-2 text-2xl font-bold">{d.decade}s</h2>
+          <h2 className="sticky top-0 z-10 bg-paper py-2 text-2xl font-bold">{d.decade}s</h2>
           {d.years.map((y) => (
             <div key={y.year} className="mb-6">
-              <h3 className="mb-2 text-lg font-semibold text-black/70">{y.year}</h3>
+              <h3 className="mb-2 text-lg font-semibold text-ink-soft">{y.year}</h3>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {y.items.map((item) => (
                   <MediaTile key={item.id} item={item} />
@@ -69,8 +73,8 @@ export function TimelineView() {
 
       {data!.undated.length > 0 && (
         <section>
-          <h2 className="sticky top-0 z-10 bg-white py-2 text-2xl font-bold">Undated</h2>
-          <p className="mb-3 text-sm text-black/60">
+          <h2 className="sticky top-0 z-10 bg-paper py-2 text-2xl font-bold">Undated</h2>
+          <p className="mb-3 text-base text-ink-soft">
             Add a year on a photo&apos;s Details tab to place it in time.
           </p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

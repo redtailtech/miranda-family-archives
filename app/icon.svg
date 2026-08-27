@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Miranda Family Archives — a print mounted with amber photo corners -->
+  <rect width="64" height="64" rx="14" fill="#4e3a2a"/>
+  <rect x="14" y="14" width="36" height="36" rx="2" fill="#faf7ef"/>
+  <circle cx="27" cy="27" r="4.5" fill="#c9800f"/>
+  <path d="M18 45 l8 -9 6 6 5 -5 9 8 v2 h-28 z" fill="#6a594b"/>
+  <path d="M14 14 h12 l-12 12 z" fill="#c9800f"/>
+  <path d="M50 50 h-12 l12 -12 z" fill="#c9800f"/>
+</svg>

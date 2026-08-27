@@ -261,17 +261,17 @@ function UploadDetailRow({ mediaId, name }: UploadedFile) {
   }
 
   return (
-    <li className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+    <li className="flex flex-wrap items-center gap-3 rounded-xl border bg-surface p-3">
       <span className="min-w-0 flex-1 truncate text-lg" title={name}>{name}</span>
       <input
-        className="w-48 rounded-lg border px-3 py-2 text-lg"
+        className="min-h-11 w-48 rounded-lg border border-ink/25 px-3 py-2 text-lg"
         placeholder="Title"
         value={title}
         disabled={state === 'saving' || state === 'saved'}
         onChange={(e) => setTitle(e.target.value)}
       />
       <input
-        className="w-24 rounded-lg border px-3 py-2 text-lg"
+        className="min-h-11 w-24 rounded-lg border border-ink/25 px-3 py-2 text-lg"
         placeholder="Year"
         inputMode="numeric"
         maxLength={4}
@@ -286,7 +286,7 @@ function UploadDetailRow({ mediaId, name }: UploadedFile) {
           type="button"
           onClick={save}
           disabled={state === 'saving'}
-          className="rounded-lg bg-black px-4 py-2 text-lg text-white disabled:opacity-50"
+          className="min-h-11 rounded-lg bg-ink px-4 py-2 text-lg text-paper hover:bg-sepia disabled:opacity-50"
         >
           {state === 'saving' ? 'Saving…' : 'Save'}
         </button>

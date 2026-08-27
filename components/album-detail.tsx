@@ -25,12 +25,14 @@ import { AlbumForm } from '@/components/album-form'
 
 function AlbumItemTile({
   item,
+  isCover,
   menuOpen,
   onToggleMenu,
   onRemove,
   onMakeCover,
 }: {
   item: MediaItemDTO
+  isCover: boolean
   menuOpen: boolean
   onToggleMenu: () => void
   onRemove: () => void
@@ -51,7 +53,7 @@ function AlbumItemTile({
       style={style}
       {...attributes}
       {...listeners}
-      className="relative aspect-square touch-none select-none overflow-hidden rounded-xl bg-black/5"
+      className="relative aspect-square touch-none select-none overflow-hidden rounded-xl bg-wash"
     >
       {item.thumbUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -62,8 +64,14 @@ function AlbumItemTile({
           draggable={false}
         />
       ) : (
-        <span className="flex h-full items-center justify-center p-2 text-center text-sm">
+        <span className="flex h-full items-center justify-center p-2 text-center text-base text-ink-soft">
           {item.status === 'FAILED' ? 'Failed' : 'Processing…'}
+        </span>
+      )}
+
+      {isCover && (
+        <span className="absolute left-2 top-2 rounded-md bg-amber-deep px-2 py-0.5 text-sm font-semibold text-white shadow">
+          Cover
         </span>
       )}
 
@@ -75,7 +83,7 @@ function AlbumItemTile({
         }}
         onPointerDown={(e) => e.stopPropagation()}
         aria-label="Item actions"
-        className="absolute right-2 top-2 rounded-full bg-white/90 px-2 py-1 text-lg leading-none shadow"
+        className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-surface/95 text-xl leading-none shadow"
       >
         ⋮
       </button>
@@ -84,19 +92,19 @@ function AlbumItemTile({
         <div
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          className="absolute right-2 top-11 z-10 grid min-w-[10rem] gap-1 rounded-xl border bg-white p-2 shadow-lg"
+          className="absolute right-2 top-14 z-10 grid min-w-[12rem] gap-1 rounded-xl border bg-surface p-2 shadow-lg"
         >
           <button
             type="button"
             onClick={onMakeCover}
-            className="rounded-lg px-3 py-2 text-left text-base hover:bg-black/5"
+            className="rounded-lg px-4 py-2.5 text-left text-lg hover:bg-wash"
           >
             Make cover
           </button>
           <button
             type="button"
             onClick={onRemove}
-            className="rounded-lg px-3 py-2 text-left text-base text-red-700 hover:bg-black/5"
+            className="rounded-lg px-4 py-2.5 text-left text-lg text-red-700 hover:bg-wash"
           >
             Remove from album
           </button>
@@ -164,10 +172,14 @@ function AddPhotosModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[85vh] w-full max-w-3xl overflow-auto rounded-xl bg-white p-6">
+      <div className="max-h-[85vh] w-full max-w-3xl overflow-auto rounded-xl bg-surface p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-2xl font-bold">Add photos</h2>
-          <button type="button" onClick={onClose} className="rounded-xl border px-4 py-2 text-lg">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-ink/25 bg-surface px-5 py-2.5 text-lg hover:bg-wash"
+          >
             Close
           </button>
         </div>
@@ -182,7 +194,7 @@ function AddPhotosModal({
                 key={item.id}
                 onClick={() => !isMember && addItem(item)}
                 disabled={isMember || addingId === item.id}
-                className="relative aspect-square overflow-hidden rounded-xl bg-black/5 disabled:opacity-70"
+                className="relative aspect-square overflow-hidden rounded-xl bg-wash disabled:opacity-70"
               >
                 {item.thumbUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -324,16 +336,20 @@ export function AlbumDetail({ album, items }: { album: AlbumDTO; items: MediaIte
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold">{album.name}</h1>
-              {album.description && <p className="mt-2 text-lg text-black/70">{album.description}</p>}
+              {album.description && <p className="mt-2 text-lg text-ink-soft">{album.description}</p>}
             </div>
             <div className="flex gap-3">
-              <button type="button" onClick={() => setEditingHeader(true)} className="rounded-xl border px-5 py-3 text-lg">
+              <button
+                type="button"
+                onClick={() => setEditingHeader(true)}
+                className="rounded-xl border border-ink/25 bg-surface px-5 py-3 text-lg hover:bg-wash"
+              >
                 Edit
               </button>
               <button
                 type="button"
                 onClick={deleteAlbum}
-                className="rounded-xl border border-red-700 px-5 py-3 text-lg text-red-700"
+                className="rounded-xl border border-red-700 bg-surface px-5 py-3 text-lg text-red-700 hover:bg-red-100"
               >
                 Delete album
               </button>
@@ -343,11 +359,13 @@ export function AlbumDetail({ album, items }: { album: AlbumDTO; items: MediaIte
       </div>
 
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-lg text-black/60">{orderedItems.length} items</p>
+        <p className="text-lg text-ink-soft">
+          {orderedItems.length} {orderedItems.length === 1 ? 'item' : 'items'}
+        </p>
         <button
           type="button"
           onClick={() => setShowAddPhotos(true)}
-          className="rounded-xl bg-black px-6 py-3 text-lg text-white"
+          className="rounded-xl bg-ink px-6 py-3 text-lg font-medium text-paper hover:bg-sepia"
         >
           Add photos
         </button>
@@ -357,7 +375,9 @@ export function AlbumDetail({ album, items }: { album: AlbumDTO; items: MediaIte
       {actionError && <p className="mb-4 text-lg text-red-700">{actionError}</p>}
 
       {orderedItems.length === 0 ? (
-        <p className="text-xl">No photos in this album yet — add some.</p>
+        <p className="text-xl">
+          This album is empty so far — tap &ldquo;Add photos&rdquo; to start filling it.
+        </p>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={orderedItems.map((i) => i.id)} strategy={rectSortingStrategy}>
@@ -366,6 +386,7 @@ export function AlbumDetail({ album, items }: { album: AlbumDTO; items: MediaIte
                 <AlbumItemTile
                   key={item.id}
                   item={item}
+                  isCover={item.id === album.coverMediaId}
                   menuOpen={openMenuId === item.id}
                   onToggleMenu={() => setOpenMenuId((prev) => (prev === item.id ? null : item.id))}
                   onRemove={() => removeItem(item.id)}
