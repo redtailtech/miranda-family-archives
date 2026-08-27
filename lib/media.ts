@@ -69,7 +69,7 @@ export async function mediaItemToDTO(
     dateDay: item.dateDay,
     dateIsApproximate: item.dateIsApproximate,
     createdAt: item.createdAt.toISOString(),
-    uploadedBy: item.uploadedBy ? { id: item.uploadedBy.id, name: item.uploadedBy.name } : null,
+    uploadedBy: item.uploadedBy ? { id: item.uploadedBy.id, name: item.uploadedBy.name || item.uploadedBy.email } : null,
     thumbUrl: item.thumbKey ? await signGetUrl(item.thumbKey) : null,
   }
   if (opts.detail) {

@@ -69,10 +69,10 @@ async function uploadChunkWithRetry(
       const { url } = await api('/api/uploads/sign-part', { key, uploadId, partNumber })
       const { etag } = await uploadChunk(url, chunk, (loaded) => {
         uppy.emit('upload-progress', file, {
-          uploadStarted: Date.now(),
           bytesUploaded: start + loaded,
           bytesTotal: fileData.size,
-        })
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any)
       })
       return { etag }
     } catch (err) {
@@ -137,6 +137,8 @@ async function processFilesWithConcurrency(
       meta.mediaId = mediaId
       meta.key = key
       meta.uploadId = uploadId
+
+      uppy.emit('upload-start', [file])
 
       const parts: Array<{ PartNumber: number; ETag: string }> = []
       const fileData = file.data as Blob
