@@ -49,11 +49,19 @@ export type MediaItemDTO = {
   largeUrl?: string | null
   exif?: Record<string, unknown> | null
   inlineUrl?: string | null
+  heartCount: number
+  heartedByMe: boolean
+}
+
+export type MediaItemWithSocial = MediaItem & {
+  uploadedBy?: User | null
+  _count?: { hearts: number }
+  hearts?: { userId: string }[]
 }
 
 export async function mediaItemToDTO(
-  item: MediaItem & { uploadedBy?: User | null },
-  opts: { detail?: boolean } = {}
+  item: MediaItemWithSocial,
+  opts: { detail?: boolean; viewerUserId?: string } = {}
 ): Promise<MediaItemDTO> {
   const dto: MediaItemDTO = {
     id: item.id,
@@ -73,6 +81,8 @@ export async function mediaItemToDTO(
     createdAt: item.createdAt.toISOString(),
     uploadedBy: item.uploadedBy ? { id: item.uploadedBy.id, name: item.uploadedBy.name || item.uploadedBy.email } : null,
     thumbUrl: item.thumbKey ? await signGetUrl(item.thumbKey) : null,
+    heartCount: item._count?.hearts ?? 0,
+    heartedByMe: Array.isArray(item.hearts) && item.hearts.length > 0,
   }
   if (opts.detail) {
     dto.webUrl = item.webKey ? await signGetUrl(item.webKey) : null

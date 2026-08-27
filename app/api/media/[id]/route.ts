@@ -14,13 +14,19 @@ import {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const viewer = await prisma.user.findUnique({ where: { clerkId: userId } })
+  const viewerUserId = viewer?.id
   const { id } = await params
   const item = await prisma.mediaItem.findFirst({
     where: { id, deletedAt: null },
-    include: { uploadedBy: true },
+    include: {
+      uploadedBy: true,
+      _count: { select: { hearts: true } },
+      hearts: viewerUserId ? { where: { userId: viewerUserId } } : false,
+    },
   })
   if (!item) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json(await mediaItemToDTO(item, { detail: true }))
+  return NextResponse.json(await mediaItemToDTO(item, { detail: true, viewerUserId }))
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

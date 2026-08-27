@@ -16,10 +16,14 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
   const viewer = userId ? await prisma.user.findUnique({ where: { clerkId: userId } }) : null
   const item = await prisma.mediaItem.findFirst({
     where: { id, deletedAt: null },
-    include: { uploadedBy: true },
+    include: {
+      uploadedBy: true,
+      _count: { select: { hearts: true } },
+      hearts: viewer ? { where: { userId: viewer.id } } : false,
+    },
   })
   if (!item) notFound()
-  const dto = await mediaItemToDTO(item, { detail: true })
+  const dto = await mediaItemToDTO(item, { detail: true, viewerUserId: viewer?.id })
   const sizeMB = (dto.originalSize / (1024 * 1024)).toFixed(1)
 
   return (
