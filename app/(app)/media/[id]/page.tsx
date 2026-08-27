@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { mediaItemToDTO } from '@/lib/media'
+import { RetryButton } from '@/components/retry-button'
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -55,23 +56,5 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         <dt className="font-semibold">File</dt><dd>{dto.originalFilename} ({dto.mimeType})</dd>
       </dl>
     </div>
-  )
-}
-
-function RetryButton({ id }: { id: string }) {
-  async function retry() {
-    'use server'
-    const { prisma } = await import('@/lib/db')
-    const { enqueueProcessMedia } = await import('@/lib/queue')
-    const item = await prisma.mediaItem.findUnique({ where: { id } })
-    if (item?.status === 'FAILED') {
-      await prisma.mediaItem.update({ where: { id }, data: { status: 'PROCESSING', error: null } })
-      await enqueueProcessMedia(id)
-    }
-  }
-  return (
-    <form action={retry}>
-      <button className="rounded-xl border px-6 py-3 text-lg">Retry processing</button>
-    </form>
   )
 }

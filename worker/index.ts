@@ -4,9 +4,39 @@ import './env'
 
 import { PgBoss } from 'pg-boss'
 import type { JobWithMetadata } from 'pg-boss'
-import { QUEUE_PROCESS_MEDIA } from '@/lib/queue'
+import { QUEUE_PROCESS_MEDIA, enqueueProcessMedia } from '@/lib/queue'
 import { processMedia } from './process-media'
 import { prisma } from '@/lib/db'
+
+const STALE_SWEEP_INTERVAL_MS = 10 * 60 * 1000
+const STALE_THRESHOLD_MS = 30 * 60 * 1000
+
+async function sweepStaleProcessing() {
+  try {
+    const cutoff = new Date(Date.now() - STALE_THRESHOLD_MS)
+    const stale = await prisma.mediaItem.findMany({
+      where: { status: 'PROCESSING', updatedAt: { lt: cutoff } },
+      select: { id: true },
+    })
+    let reenqueued = 0
+    for (const { id } of stale) {
+      // Guard against racing a live job: only touch/re-enqueue if it's still stale
+      // at the moment we act on it.
+      const touched = await prisma.mediaItem.updateMany({
+        where: { id, status: 'PROCESSING', updatedAt: { lt: cutoff } },
+        data: { updatedAt: new Date() },
+      })
+      if (touched.count === 1) {
+        await enqueueProcessMedia(id)
+        reenqueued++
+        console.log(`stale sweep: re-enqueued ${id}`)
+      }
+    }
+    console.log(`stale sweep: checked ${stale.length} candidate(s), ${reenqueued} re-enqueued`)
+  } catch (err) {
+    console.error('stale sweep failed:', err)
+  }
+}
 
 async function main() {
   const boss = new PgBoss(process.env.DATABASE_URL!)
@@ -26,16 +56,23 @@ async function main() {
       } catch (err) {
         console.error(`failed ${mediaId}:`, err)
         if (job.retryCount >= job.retryLimit) {
-          await prisma.mediaItem.update({
-            where: { id: mediaId },
-            data: { status: 'FAILED', error: String(err).slice(0, 1000) },
-          })
+          try {
+            await prisma.mediaItem.update({
+              where: { id: mediaId },
+              data: { status: 'FAILED', error: String(err).slice(0, 1000) },
+            })
+          } catch (updateErr) {
+            console.error(`failed to mark ${mediaId} as FAILED:`, updateErr)
+          }
         }
         throw err // let pg-boss retry
       }
     }
   )
   console.log('worker listening on', QUEUE_PROCESS_MEDIA)
+
+  await sweepStaleProcessing()
+  setInterval(sweepStaleProcessing, STALE_SWEEP_INTERVAL_MS)
 }
 
 main().catch((err) => {

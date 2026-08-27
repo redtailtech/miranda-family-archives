@@ -9,17 +9,29 @@ export function MediaGrid() {
   const [cursor, setCursor] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [errored, setErrored] = useState(false)
   const sentinel = useRef<HTMLDivElement>(null)
 
   const loadMore = useCallback(async () => {
     if (loading || done) return
     setLoading(true)
-    const res = await fetch(`/api/media${cursor ? `?cursor=${cursor}` : ''}`)
-    const data = await res.json()
-    setItems((prev) => [...prev, ...data.items])
-    setCursor(data.nextCursor)
-    if (!data.nextCursor) setDone(true)
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/media${cursor ? `?cursor=${cursor}` : ''}`)
+      if (!res.ok) {
+        setDone(true)
+        setErrored(true)
+        return
+      }
+      const data = await res.json()
+      setItems((prev) => [...prev, ...data.items])
+      setCursor(data.nextCursor)
+      if (!data.nextCursor) setDone(true)
+    } catch {
+      setDone(true)
+      setErrored(true)
+    } finally {
+      setLoading(false)
+    }
   }, [cursor, done, loading])
 
   useEffect(() => {
@@ -38,7 +50,7 @@ export function MediaGrid() {
     return () => obs.disconnect()
   }, [loadMore])
 
-  if (done && items.length === 0)
+  if (done && !errored && items.length === 0)
     return (
       <p className="text-xl">
         Nothing here yet —{' '}
@@ -80,6 +92,11 @@ export function MediaGrid() {
       </div>
       <div ref={sentinel} className="h-8" />
       {loading && <p className="py-4 text-center">Loading…</p>}
+      {errored && (
+        <p className="py-4 text-center text-red-700">
+          Couldn&apos;t load photos — refresh to try again.
+        </p>
+      )}
     </div>
   )
 }

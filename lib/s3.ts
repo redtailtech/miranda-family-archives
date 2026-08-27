@@ -54,13 +54,16 @@ export function signGetUrl(
   key: string,
   opts: { downloadName?: string; expiresIn?: number } = {}
 ) {
+  const sanitizedName = opts.downloadName
+    ? opts.downloadName.replace(/[^\x20-\x7E]/g, '').replace(/"/g, '') || 'download'
+    : undefined
   return getSignedUrl(
     s3,
     new GetObjectCommand({
       Bucket: BUCKET,
       Key: key,
-      ...(opts.downloadName
-        ? { ResponseContentDisposition: `attachment; filename="${opts.downloadName.replace(/"/g, '')}"` }
+      ...(sanitizedName
+        ? { ResponseContentDisposition: `attachment; filename="${sanitizedName}"` }
         : {}),
     }),
     { expiresIn: opts.expiresIn ?? 3600 }

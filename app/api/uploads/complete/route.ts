@@ -16,6 +16,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (item.uploadedById !== user.id && user.role !== 'ADMIN')
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  if (item.status !== 'UPLOADING')
+    return NextResponse.json({ error: 'not uploading' }, { status: 409 })
+
+  if (
+    !Array.isArray(parts) ||
+    parts.length === 0 ||
+    !parts.every(
+      (p) =>
+        p &&
+        typeof p.ETag === 'string' &&
+        typeof p.PartNumber === 'number' &&
+        Number.isInteger(p.PartNumber)
+    )
+  )
+    return NextResponse.json({ error: 'invalid parts' }, { status: 400 })
 
   await completeMultipart(key, uploadId, parts)
 

@@ -8,7 +8,8 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const cursor = req.nextUrl.searchParams.get('cursor')
-  const limit = Math.min(Number(req.nextUrl.searchParams.get('limit') ?? 50), 100)
+  const rawLimit = Number(req.nextUrl.searchParams.get('limit') ?? 50)
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, Math.trunc(rawLimit)), 100) : 50
 
   const items = await prisma.mediaItem.findMany({
     where: { deletedAt: null },
