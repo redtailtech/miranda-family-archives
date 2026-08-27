@@ -15,7 +15,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { user, error } = await requireUser()
   if (error) return error
   const { id } = await params
-  const { mediaId } = await req.json()
+  let mediaId: string
+  try {
+    ;({ mediaId } = await req.json())
+  } catch {
+    return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
+  }
   const album = await prisma.album.findUnique({ where: { id }, include: { items: true } })
   if (!album) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const media = await prisma.mediaItem.findFirst({ where: { id: mediaId, deletedAt: null } })
@@ -32,13 +37,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { user, error } = await requireUser()
   if (error) return error
   const { id } = await params
-  const { orderedMediaIds } = await req.json()
+  let orderedMediaIds: unknown
+  try {
+    ;({ orderedMediaIds } = await req.json())
+  } catch {
+    return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
+  }
   const items = await prisma.albumItem.findMany({ where: { albumId: id } })
   if (items.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const current = new Set(items.map((i) => i.mediaItemId))
   if (
     !Array.isArray(orderedMediaIds) ||
     orderedMediaIds.length !== items.length ||
+    new Set(orderedMediaIds).size !== items.length ||
     !orderedMediaIds.every((m: unknown) => typeof m === 'string' && current.has(m))
   )
     return NextResponse.json({ error: 'orderedMediaIds must be a permutation of album items' }, { status: 400 })
