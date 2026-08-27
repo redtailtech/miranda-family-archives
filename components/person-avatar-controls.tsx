@@ -8,10 +8,7 @@ const MAX_AVATAR_BYTES = 5 * 1024 * 1024
 
 /**
  * Photo-pick modal for "Choose from their photos". Fetches
- * `/api/media?personId={id}` — that filter is inert until Task 5 wires it
- * into buildMediaWhere, so today this may surface recent photos beyond just
- * the ones this person is tagged in; it degrades gracefully to an empty-state
- * message either way. Mirrors AddPhotosModal's modal/grid idiom.
+ * `/api/media?personId={id}` and mirrors AddPhotosModal's modal/grid idiom.
  */
 function PickFromPhotosModal({
   personId,

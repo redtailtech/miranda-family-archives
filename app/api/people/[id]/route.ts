@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/require-user'
 import { personToDTO } from '@/lib/people'
+import { safeErrorResponse } from '@/lib/http-errors'
 import {
   updatePersonWithAudit,
   softDeletePersonWithAudit,
@@ -60,8 +61,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     await softDeletePersonWithAudit(id, user!.id)
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500
-    return NextResponse.json({ error: 'not found' }, { status })
+    const { status, message } = safeErrorResponse(err)
+    return NextResponse.json({ error: message }, { status })
   }
   return NextResponse.json({ ok: true })
 }

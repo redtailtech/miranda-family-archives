@@ -19,6 +19,19 @@ const LABELS: Record<string, string> = {
 
 function fieldSentence(field: string, from: unknown, to: unknown): string {
   const label = LABELS[field] ?? field
+  if (Array.isArray(from) && Array.isArray(to)) {
+    const fromNames = from as string[]
+    const toNames = to as string[]
+    if (field === 'people') {
+      const added = toNames.filter((n) => !fromNames.includes(n))
+      const removed = fromNames.filter((n) => !toNames.includes(n))
+      const parts: string[] = []
+      if (added.length > 0) parts.push(`tagged ${added.join(', ')}`)
+      if (removed.length > 0) parts.push(`removed ${removed.join(', ')}`)
+      return parts.length > 0 ? parts.join('; ') : `changed ${label}`
+    }
+    return `changed ${label} from "${fromNames.join(', ')}" to "${toNames.join(', ')}"`
+  }
   if (from == null) return `set ${label} to "${to}"`
   if (to == null) return `cleared ${label} (was "${from}")`
   return `changed ${label} from "${from}" to "${to}"`

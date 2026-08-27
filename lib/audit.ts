@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
-import type { Prisma, Gender } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import type { Gender } from '@prisma/client'
 
 export const EDITABLE_MEDIA_FIELDS = [
   'title',
@@ -401,13 +402,22 @@ export async function restorePersonWithAudit(personId: string, actorUserId: stri
   ])
 }
 
-/** True if `candidateAncestorId` has `personId` anywhere in their ancestor chain — used to block cycles. */
-async function wouldCreateCycle(childId: string, parentId: string): Promise<boolean> {
+/**
+ * True if `parentId` has `childId` anywhere in their ancestor chain — used to
+ * block cycles. Accepts an optional Prisma client so it can be re-run inside
+ * an in-progress transaction (see `addParentWithAudit`) to close the TOCTOU
+ * window between the pre-check and the actual `parentChild.create`.
+ */
+async function wouldCreateCycle(
+  childId: string,
+  parentId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<boolean> {
   const seen = new Set<string>()
   let frontier = [parentId]
   while (frontier.length > 0) {
     if (frontier.includes(childId)) return true
-    const rows = await prisma.parentChild.findMany({
+    const rows = await client.parentChild.findMany({
       where: { childId: { in: frontier } },
       select: { parentId: true },
     })
@@ -439,23 +449,49 @@ export async function addParentWithAudit(childId: string, parentId: string, acto
   if (!child || !parent) throw Object.assign(new Error('person not found'), { status: 404 })
   const existing = await prisma.parentChild.findUnique({ where: { childId_parentId: { childId, parentId } } })
   if (existing) throw Object.assign(new Error('that parent relationship already exists'), { status: 400 })
+  // Fast common-path check outside the transaction; re-checked below inside
+  // the transaction (after the row is created) to close the TOCTOU window
+  // where two concurrent adds (A→B, B→A) could both pass this pre-check.
   if (await wouldCreateCycle(childId, parentId))
     throw Object.assign(new Error('that would make someone their own ancestor'), { status: 400 })
 
-  await prisma.$transaction(async (tx) => {
-    const beforeNames = await currentParentNames(tx, childId)
-    await tx.parentChild.create({ data: { childId, parentId } })
-    const afterNames = await currentParentNames(tx, childId)
-    await tx.auditLog.create({
-      data: {
-        userId: actorUserId,
-        entityType: 'person',
-        entityId: childId,
-        action: 'UPDATE',
-        changes: { parents: { from: beforeNames, to: afterNames } } as Prisma.InputJsonValue,
-      },
-    })
-  })
+  // Serializable isolation is required (not just re-checking post-insert)
+  // because under the default Read Committed level two concurrent
+  // transactions' in-transaction rechecks can each run before the other's
+  // commit, so neither sees the other's new row and both pass. Postgres
+  // aborts one side of a genuine conflict under Serializable with a
+  // serialization failure (Prisma error code P2034); retry that side once
+  // the other has committed — the pre-check/recheck will then correctly see
+  // the now-committed reverse edge and reject with the tagged cycle error.
+  const MAX_ATTEMPTS = 3
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          const beforeNames = await currentParentNames(tx, childId)
+          await tx.parentChild.create({ data: { childId, parentId } })
+          if (await wouldCreateCycle(childId, parentId, tx))
+            throw Object.assign(new Error('that would make someone their own ancestor'), { status: 400 })
+          const afterNames = await currentParentNames(tx, childId)
+          await tx.auditLog.create({
+            data: {
+              userId: actorUserId,
+              entityType: 'person',
+              entityId: childId,
+              action: 'UPDATE',
+              changes: { parents: { from: beforeNames, to: afterNames } } as Prisma.InputJsonValue,
+            },
+          })
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+      )
+      return
+    } catch (err) {
+      const isSerializationConflict = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034'
+      if (isSerializationConflict && attempt < MAX_ATTEMPTS) continue
+      throw err
+    }
+  }
 }
 
 export async function removeParentWithAudit(childId: string, parentId: string, actorUserId: string): Promise<void> {

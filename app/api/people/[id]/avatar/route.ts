@@ -8,7 +8,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (error) return error
   const { id } = await params
 
-  const form = await req.formData()
+  let form: FormData
+  try {
+    form = await req.formData()
+  } catch {
+    return NextResponse.json({ error: 'expected multipart form data' }, { status: 400 })
+  }
   const file = form.get('file')
   if (!(file instanceof Blob)) return NextResponse.json({ error: 'file is required' }, { status: 400 })
 
