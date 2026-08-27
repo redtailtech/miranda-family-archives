@@ -3,7 +3,10 @@ import Link from 'next/link'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import { mediaItemToDTO } from '@/lib/media'
+import { personToLite } from '@/lib/people'
 import { AdminItemActions } from '@/components/admin-item-actions'
+import { PersonAdminActions } from '@/components/person-admin-actions'
+import { PersonAvatar } from '@/components/person-avatar'
 
 export default async function DeletedItemsPage() {
   const { userId } = await auth()
@@ -16,6 +19,12 @@ export default async function DeletedItemsPage() {
     include: { uploadedBy: true },
   })
   const dtos = await Promise.all(items.map((i) => mediaItemToDTO(i)))
+
+  const deletedPeople = await prisma.person.findMany({
+    where: { NOT: { deletedAt: null } },
+    orderBy: { deletedAt: 'desc' },
+  })
+  const peopleLite = await Promise.all(deletedPeople.map((p) => personToLite(p)))
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -38,6 +47,26 @@ export default async function DeletedItemsPage() {
               </div>
             </div>
             <AdminItemActions id={dto.id} deleted={true} />
+          </li>
+        ))}
+      </ul>
+
+      <h2 className="my-4 text-2xl font-bold">Deleted people</h2>
+      {peopleLite.length === 0 && <p className="text-lg">No one has been deleted.</p>}
+      <ul className="grid gap-4">
+        {peopleLite.map((p, i) => (
+          <li key={p.id} className="flex items-center gap-4 rounded-xl border p-4">
+            <PersonAvatar person={p} size="md" />
+            <div className="flex-1 text-lg">
+              <div className="font-semibold">{p.displayName}</div>
+              <div className="text-sm text-black/60">
+                deleted{' '}
+                {deletedPeople[i].deletedAt
+                  ? new Date(deletedPeople[i].deletedAt!).toLocaleDateString()
+                  : ''}
+              </div>
+            </div>
+            <PersonAdminActions id={p.id} deleted={true} />
           </li>
         ))}
       </ul>
