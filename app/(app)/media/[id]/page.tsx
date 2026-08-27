@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import { mediaItemToDTO } from '@/lib/media'
 import { RetryButton } from '@/components/retry-button'
@@ -7,9 +8,12 @@ import { DetailTabs } from '@/components/detail-tabs'
 import { MediaEditForm } from '@/components/media-edit-form'
 import { ExifTable } from '@/components/exif-table'
 import { HistoryList } from '@/components/history-list'
+import { AdminItemActions } from '@/components/admin-item-actions'
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const { userId } = await auth()
+  const viewer = userId ? await prisma.user.findUnique({ where: { clerkId: userId } }) : null
   const item = await prisma.mediaItem.findFirst({
     where: { id, deletedAt: null },
     include: { uploadedBy: true },
@@ -52,6 +56,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
           Download original ({sizeMB} MB)
         </a>
         {dto.status === 'FAILED' && <RetryButton id={dto.id} />}
+        {viewer?.role === 'ADMIN' && <AdminItemActions id={dto.id} deleted={false} />}
       </div>
 
       <DetailTabs
