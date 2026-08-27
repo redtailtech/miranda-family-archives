@@ -2,20 +2,37 @@
  * Pure family-tree layout algorithm. No prisma/next imports — unit-verifiable
  * in isolation (see the module-level assertions run during Task 4 verification).
  *
- * Algorithm (per Phase 5 Task 4 brief, pushdown pass added in the 2026-08-27
- * tree-layout fix):
+ * Algorithm (per Phase 5 Task 4 brief; pushdown pass added in the 2026-08-27
+ * tree-layout fix, then folded into a joint fixed point with spouse pulling
+ * in that same fix's round-1 review correction):
  *  1. generation = longest ancestor-chain depth (memoized DFS; cycle-safe via a
  *     visiting set — a back-edge contributes depth 0 rather than recursing).
- *  1.5. Pushdown: anyone with no recorded parents (or otherwise under-placed
- *     relative to their children) is anchored directly above ALL of their
- *     children — gen(P) = max(gen(P), min over children C of gen(C) − 1).
- *     This fixes parentless co-parents (e.g. a divorced parent with no
- *     spouse link and no recorded parents of their own) floating to
- *     generation 0 instead of sitting one row above their child. Iterates to
- *     a fixed point (a parentless grandparent chain above such a person must
- *     cascade upward too), bounded by maxGen and capped at peopleIds.length
- *     iterations as a cycle backstop.
- *  2. Spouses are pulled into the same generation (max of the pair/group).
+ *     This seeds the joint fixed point below.
+ *  1.5/2. Joint fixed point of three monotone non-decreasing passes, repeated
+ *     until a full round makes no change (cap: peopleIds.length rounds, as a
+ *     cycle backstop consistent with step 1's cycle guard):
+ *       a. child-propagation: gen(child) = max(gen(child), max over parents
+ *          (gen(parent) + 1)) — keeps a child strictly below every parent,
+ *          including a parent whose gen a later pass just raised.
+ *       b. pushdown: gen(parent) = max(gen(parent), min over children
+ *          (gen(child)) − 1) — anchors anyone with no recorded parents (or
+ *          otherwise under-placed relative to their children) directly above
+ *          ALL of their children. `min` (not max) because a parent with
+ *          children on different rows must stay strictly above all of them.
+ *       c. spouse equalization: every spouse-group member takes the group's
+ *          max generation (reuses pullSpousesToSameGeneration's union-find
+ *          group-max semantics, applied to the current generations).
+ *     Running these three passes in isolation and in sequence (as the
+ *     original pushdown-then-pull-spouses fix did) can leave a spouse below
+ *     her own child: pushdown raises a parentless co-parent P to sit above a
+ *     deep-generation child, then a single spouse-pull raises P's spouse Q to
+ *     match — without re-running child-propagation, Q's OWN children (at a
+ *     shallower generation) are never re-checked against Q's new, deeper
+ *     generation. Iterating all three together to a fixed point closes that
+ *     gap: raising Q re-triggers child-propagation for Q's children, which
+ *     may in turn re-trigger pushdown and further spouse equalization, until
+ *     both invariants — every parent strictly above every child, and every
+ *     spouse-group member sharing a row — hold simultaneously.
  *  3. Within a generation, nodes are ordered by family cluster: children sort
  *     toward the mean x of their (already-placed) parents, processing
  *     generations top-down; spouses stay adjacent (b immediately after a).
@@ -80,56 +97,8 @@ function computeRawGenerations(
   return result
 }
 
-/**
- * Step 1.5: push parentless (or otherwise under-placed) ancestors down so
- * they sit directly above ALL of their children. For every person P with at
- * least one child, gen(P) = max(gen(P), min over children C of gen(C) - 1).
- * `min` (not max) because a parent with children on different rows must
- * stay strictly above all of them. Iterates to a fixed point since pushing
- * P down can make P's own parents eligible for a pushdown in turn; the
- * update is monotone non-decreasing and bounded, so `while (changed)`
- * terminates, with peopleIds.length as a cycle backstop.
- */
-function pushdownParentsAboveChildren(
-  peopleIds: string[],
-  parentLinks: { childId: string; parentId: string }[],
-  rawGen: Map<string, number>
-): Map<string, number> {
-  const knownIds = new Set(peopleIds)
-  const childrenOf = new Map<string, string[]>()
-  for (const { childId, parentId } of parentLinks) {
-    if (!knownIds.has(childId) || !knownIds.has(parentId)) continue
-    if (!childrenOf.has(parentId)) childrenOf.set(parentId, [])
-    childrenOf.get(parentId)!.push(childId)
-  }
-
-  const gen = new Map(rawGen)
-  let changed = true
-  let iterations = 0
-  while (changed && iterations < peopleIds.length) {
-    changed = false
-    iterations++
-    for (const id of peopleIds) {
-      const children = childrenOf.get(id)
-      if (!children || children.length === 0) continue
-      let minChildGen = Infinity
-      for (const c of children) {
-        const cg = gen.get(c)
-        if (cg !== undefined) minChildGen = Math.min(minChildGen, cg)
-      }
-      if (minChildGen === Infinity) continue
-      const target = minChildGen - 1
-      const current = gen.get(id) ?? 0
-      if (target > current) {
-        gen.set(id, target)
-        changed = true
-      }
-    }
-  }
-  return gen
-}
-
-/** Step 2: union-find over spouseLinks; generation of a group = max raw generation in it. */
+/** Step 2 (used both standalone and as pass (c) inside the joint fixed point below):
+ * union-find over spouseLinks; generation of a group = max generation in it. */
 function pullSpousesToSameGeneration(
   peopleIds: string[],
   spouseLinks: { personAId: string; personBId: string }[],
@@ -171,6 +140,96 @@ function pullSpousesToSameGeneration(
   const finalGen = new Map<string, number>()
   for (const id of peopleIds) finalGen.set(id, groupMax.get(find(id))!)
   return finalGen
+}
+
+/**
+ * Steps 1.5/2: joint fixed point of child-propagation, pushdown, and spouse
+ * equalization, iterated together until a full round makes no change.
+ *
+ * Running pushdown once and then pulling spouses once (the original 2026-08-27
+ * fix) can place a spouse BELOW her own child: pushdown raises a parentless
+ * co-parent P to sit above a deep-generation child, spouse-pull raises P's
+ * spouse Q to match — but Q's own (shallower) children are never re-checked
+ * against Q's new generation, since child-propagation doesn't re-run. Folding
+ * all three passes into one loop closes that gap.
+ *
+ * All three passes are monotone non-decreasing, so the loop terminates on
+ * acyclic data; rounds are additionally capped at peopleIds.length as a cycle
+ * backstop (child-propagation over cyclic parentLinks would otherwise ratchet
+ * forever) — on cap-hit we break and render whatever generations we have,
+ * consistent with this module's existing cycle-guard philosophy.
+ */
+function computeGenerationsJointFixedPoint(
+  peopleIds: string[],
+  parentLinks: { childId: string; parentId: string }[],
+  spouseLinks: { personAId: string; personBId: string }[],
+  rawGen: Map<string, number>
+): Map<string, number> {
+  const knownIds = new Set(peopleIds)
+  const parentsOf = new Map<string, string[]>()
+  const childrenOf = new Map<string, string[]>()
+  for (const { childId, parentId } of parentLinks) {
+    if (!knownIds.has(childId) || !knownIds.has(parentId)) continue
+    if (!parentsOf.has(childId)) parentsOf.set(childId, [])
+    parentsOf.get(childId)!.push(parentId)
+    if (!childrenOf.has(parentId)) childrenOf.set(parentId, [])
+    childrenOf.get(parentId)!.push(childId)
+  }
+
+  let gen = new Map(rawGen)
+  let round = 0
+  let changed = true
+  while (changed && round < peopleIds.length) {
+    changed = false
+    round++
+
+    // (a) child-propagation: a child must be strictly below every parent,
+    // including a parent whose generation a previous round's pushdown or
+    // spouse-equalization pass just raised.
+    for (const id of peopleIds) {
+      const parents = parentsOf.get(id)
+      if (!parents || parents.length === 0) continue
+      let maxParentGen = -Infinity
+      for (const pid of parents) {
+        const pg = gen.get(pid)
+        if (pg !== undefined) maxParentGen = Math.max(maxParentGen, pg)
+      }
+      if (maxParentGen === -Infinity) continue
+      const target = maxParentGen + 1
+      if (target > (gen.get(id) ?? 0)) {
+        gen.set(id, target)
+        changed = true
+      }
+    }
+
+    // (b) pushdown: a parent must sit strictly above ALL of its children
+    // (min over children, not max — see step 1.5 doc above).
+    for (const id of peopleIds) {
+      const children = childrenOf.get(id)
+      if (!children || children.length === 0) continue
+      let minChildGen = Infinity
+      for (const cid of children) {
+        const cg = gen.get(cid)
+        if (cg !== undefined) minChildGen = Math.min(minChildGen, cg)
+      }
+      if (minChildGen === Infinity) continue
+      const target = minChildGen - 1
+      if (target > (gen.get(id) ?? 0)) {
+        gen.set(id, target)
+        changed = true
+      }
+    }
+
+    // (c) spouse equalization: reuse pullSpousesToSameGeneration's group-max
+    // union-find semantics, applied to the current (post a/b) generations.
+    const equalized = pullSpousesToSameGeneration(peopleIds, spouseLinks, gen)
+    for (const id of peopleIds) {
+      if (equalized.get(id)! > gen.get(id)!) changed = true
+    }
+    gen = equalized
+  }
+
+  return gen
 }
 
 /** Step 3a: group a generation's people into clusters (spouses stay adjacent). */
@@ -223,8 +282,7 @@ export function layoutTree(
   const peopleIds = people.map((p) => p.id)
 
   const rawGen = computeRawGenerations(peopleIds, parentLinks)
-  const pushedGen = pushdownParentsAboveChildren(peopleIds, parentLinks, rawGen)
-  const finalGen = pullSpousesToSameGeneration(peopleIds, spouseLinks, pushedGen)
+  const finalGen = computeGenerationsJointFixedPoint(peopleIds, parentLinks, spouseLinks, rawGen)
 
   const parentsOfChild = new Map<string, string[]>()
   const knownIds = new Set(peopleIds)
