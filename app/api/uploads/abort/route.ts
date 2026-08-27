@@ -6,9 +6,14 @@ import { abortMultipart } from '@/lib/s3'
 export async function POST(req: NextRequest) {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const user = await prisma.user.findUnique({ where: { clerkId: userId } })
+  if (!user) return NextResponse.json({ error: 'no user record' }, { status: 403 })
+
   const { mediaId, key, uploadId } = await req.json()
   const item = await prisma.mediaItem.findUnique({ where: { id: mediaId } })
   if (item && item.status === 'UPLOADING') {
+    if (item.uploadedById !== user.id && user.role !== 'ADMIN')
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     if (uploadId && key === item.originalKey) await abortMultipart(key, uploadId).catch(() => {})
     await prisma.mediaItem.delete({ where: { id: mediaId } })
   }

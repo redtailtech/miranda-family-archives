@@ -14,6 +14,8 @@ export async function POST(req: NextRequest) {
   const item = await prisma.mediaItem.findUnique({ where: { id: mediaId } })
   if (!item || item.originalKey !== key)
     return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (item.uploadedById !== user.id && user.role !== 'ADMIN')
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   await completeMultipart(key, uploadId, parts)
 
