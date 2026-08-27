@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "worker": "tsx worker/index.ts"
+    "worker": "tsx worker/index.ts",
+    "digest:test": "tsx worker/send-digest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1119.0",
@@ -27,6 +28,7 @@
     "prisma": "^5.22.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "resend": "^6.24.0",
     "sharp": "^0.35.4",
     "tsx": "^4.23.12"
   },

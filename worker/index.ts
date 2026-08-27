@@ -4,8 +4,9 @@ import './env'
 
 import { PgBoss } from 'pg-boss'
 import type { JobWithMetadata } from 'pg-boss'
-import { QUEUE_PROCESS_MEDIA, enqueueProcessMedia } from '@/lib/queue'
+import { QUEUE_PROCESS_MEDIA, QUEUE_DAILY_DIGEST, enqueueProcessMedia } from '@/lib/queue'
 import { processMedia } from './process-media'
+import { runDailyDigest } from './send-digest'
 import { prisma } from '@/lib/db'
 
 const STALE_SWEEP_INTERVAL_MS = 10 * 60 * 1000
@@ -43,6 +44,8 @@ async function main() {
   boss.on('error', (err) => console.error('pg-boss error:', err))
   await boss.start()
   await boss.createQueue(QUEUE_PROCESS_MEDIA)
+  await boss.createQueue(QUEUE_DAILY_DIGEST)
+  await boss.schedule(QUEUE_DAILY_DIGEST, '0 11 * * *', {}, { tz: 'America/New_York' })
 
   await boss.work(
     QUEUE_PROCESS_MEDIA,
@@ -69,7 +72,11 @@ async function main() {
       }
     }
   )
-  console.log('worker listening on', QUEUE_PROCESS_MEDIA)
+  await boss.work(QUEUE_DAILY_DIGEST, { batchSize: 1 }, async () => {
+    const r = await runDailyDigest()
+    console.log('digest:', r)
+  })
+  console.log('worker listening on', QUEUE_PROCESS_MEDIA, QUEUE_DAILY_DIGEST)
 
   await sweepStaleProcessing()
   setInterval(sweepStaleProcessing, STALE_SWEEP_INTERVAL_MS)

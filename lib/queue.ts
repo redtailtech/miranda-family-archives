@@ -1,6 +1,7 @@
 import { PgBoss } from 'pg-boss'
 
 export const QUEUE_PROCESS_MEDIA = 'process-media'
+export const QUEUE_DAILY_DIGEST = 'daily-digest'
 
 const globalForBoss = globalThis as unknown as { boss?: Promise<PgBoss> }
 
