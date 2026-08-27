@@ -125,3 +125,99 @@ export async function restoreMediaWithAudit(mediaId: string, actorUserId: string
     }),
   ])
 }
+
+export async function createAlbumWithAudit(
+  actorUserId: string,
+  data: { name: string; description?: string | null }
+): Promise<{ id: string }> {
+  const album = await prisma.$transaction(async (tx) => {
+    const created = await tx.album.create({
+      data: { name: data.name, description: data.description ?? null },
+    })
+    await tx.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'album',
+        entityId: created.id,
+        action: 'CREATE',
+        changes: { name: { from: null, to: data.name } },
+      },
+    })
+    return created
+  })
+  return { id: album.id }
+}
+
+const EDITABLE_ALBUM_FIELDS = ['name', 'description', 'coverMediaId'] as const
+
+export async function updateAlbumWithAudit(
+  albumId: string,
+  actorUserId: string,
+  input: Partial<{ name: string; description: string | null; coverMediaId: string | null }>
+): Promise<{ changed: string[] }> {
+  const album = await prisma.album.findUnique({ where: { id: albumId } })
+  if (!album) throw Object.assign(new Error('not found'), { status: 404 })
+  const changes: Record<string, { from: unknown; to: unknown }> = {}
+  for (const field of EDITABLE_ALBUM_FIELDS) {
+    if (!(field in input)) continue
+    const to = input[field] ?? null
+    const from = (album as Record<string, unknown>)[field] ?? null
+    if (from !== to) changes[field] = { from, to }
+  }
+  if (Object.keys(changes).length === 0) return { changed: [] }
+  const data = Object.fromEntries(Object.entries(changes).map(([f, { to }]) => [f, to]))
+  await prisma.$transaction([
+    prisma.album.update({ where: { id: albumId }, data }),
+    prisma.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'album',
+        entityId: albumId,
+        action: 'UPDATE',
+        changes: changes as Prisma.InputJsonValue,
+      },
+    }),
+  ])
+  return { changed: Object.keys(changes) }
+}
+
+export async function deleteAlbumWithAudit(albumId: string, actorUserId: string): Promise<void> {
+  const album = await prisma.album.findUnique({ where: { id: albumId } })
+  if (!album) throw Object.assign(new Error('not found'), { status: 404 })
+  await prisma.$transaction([
+    prisma.albumItem.deleteMany({ where: { albumId } }),
+    prisma.album.delete({ where: { id: albumId } }),
+    prisma.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'album',
+        entityId: albumId,
+        action: 'DELETE',
+        changes: { name: { from: album.name, to: null } },
+      },
+    }),
+  ])
+}
+
+export async function albumItemsChangeWithAudit(
+  albumId: string,
+  actorUserId: string,
+  change: { added?: string[]; removed?: string[]; reordered?: boolean },
+  countBefore: number,
+  countAfter: number
+): Promise<void> {
+  await prisma.auditLog.create({
+    data: {
+      userId: actorUserId,
+      entityType: 'album',
+      entityId: albumId,
+      action: 'UPDATE',
+      changes: {
+        items: { from: countBefore, to: countAfter },
+        ...(change.added ? { added: change.added } : {}),
+        ...(change.removed ? { removed: change.removed } : {}),
+        ...(change.reordered ? { reordered: true } : {}),
+      } as Prisma.InputJsonValue,
+    },
+  })
+}
