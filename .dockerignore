@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.superpowers
+.agents
+.claude
+docs
+docker-compose.yml
