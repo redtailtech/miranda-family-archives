@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import type { MediaItemDTO } from '@/lib/media'
 
-export function MediaGrid() {
+export function MediaGrid({ query }: { query?: string } = {}) {
   const [items, setItems] = useState<MediaItemDTO[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [done, setDone] = useState(false)
@@ -16,7 +16,8 @@ export function MediaGrid() {
     if (loading || done) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/media${cursor ? `?cursor=${cursor}` : ''}`)
+      const params = [query, cursor ? `cursor=${cursor}` : null].filter(Boolean).join('&')
+      const res = await fetch(`/api/media${params ? `?${params}` : ''}`)
       if (!res.ok) {
         setDone(true)
         setErrored(true)
@@ -32,7 +33,7 @@ export function MediaGrid() {
     } finally {
       setLoading(false)
     }
-  }, [cursor, done, loading])
+  }, [cursor, done, loading, query])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -51,7 +52,9 @@ export function MediaGrid() {
   }, [loadMore])
 
   if (done && !errored && items.length === 0)
-    return (
+    return query?.includes('favorite') ? (
+      <p className="text-xl">Nothing here yet — tap the ❤️ on any photo to save it here.</p>
+    ) : (
       <p className="text-xl">
         Nothing here yet —{' '}
         <Link href="/upload" className="underline">
@@ -86,6 +89,11 @@ export function MediaGrid() {
             )}
             {item.type === 'DOCUMENT' && (
               <span aria-label="document" className="absolute right-2 top-2 rounded bg-white/80 px-1">📄</span>
+            )}
+            {item.heartCount > 0 && (
+              <span className="absolute bottom-2 left-2 rounded bg-white/80 px-1 text-sm">
+                ❤️ {item.heartCount}
+              </span>
             )}
           </Link>
         ))}

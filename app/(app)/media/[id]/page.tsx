@@ -9,6 +9,8 @@ import { MediaEditForm } from '@/components/media-edit-form'
 import { ExifTable } from '@/components/exif-table'
 import { HistoryList } from '@/components/history-list'
 import { AdminItemActions } from '@/components/admin-item-actions'
+import { HeartButton } from '@/components/heart-button'
+import { CommentThread } from '@/components/comment-thread'
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -57,6 +59,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         >
           Download original ({sizeMB} MB)
         </a>
+        <HeartButton mediaId={dto.id} initialCount={dto.heartCount} initialHearted={dto.heartedByMe} />
         {dto.status === 'FAILED' && <RetryButton id={dto.id} />}
         {viewer?.role === 'ADMIN' && <AdminItemActions id={dto.id} deleted={false} />}
       </div>
@@ -77,6 +80,11 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         advanced={<ExifTable exif={dto.exif} type={dto.type} />}
         history={<HistoryList mediaId={dto.id} />}
       />
+
+      <div className="mt-8">
+        <h2 className="mb-4 text-2xl font-bold">Comments</h2>
+        <CommentThread mediaId={dto.id} />
+      </div>
     </div>
   )
 }

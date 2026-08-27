@@ -12,9 +12,13 @@ export async function GET(req: NextRequest) {
   const cursor = req.nextUrl.searchParams.get('cursor')
   const rawLimit = Number(req.nextUrl.searchParams.get('limit') ?? 50)
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, Math.trunc(rawLimit)), 100) : 50
+  const favoriteOnly = req.nextUrl.searchParams.get('favorite') === '1'
 
   const items = await prisma.mediaItem.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      ...(favoriteOnly && viewerUserId ? { favorites: { some: { userId: viewerUserId } } } : {}),
+    },
     orderBy: { createdAt: 'desc' },
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
