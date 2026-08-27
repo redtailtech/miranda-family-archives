@@ -12,6 +12,7 @@ export function LibraryControls({ decades, albums }: { decades: number[]; albums
   const type = searchParams.get('type')
   const decade = searchParams.get('decade')
   const albumId = searchParams.get('albumId')
+  const view = searchParams.get('view')
 
   const [q, setQ] = useState(searchParams.get('q') ?? '')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -90,18 +91,12 @@ export function LibraryControls({ decades, albums }: { decades: number[]; albums
       )}
 
       <div className="flex gap-2" role="group" aria-label="View">
-        <button type="button" aria-pressed="true" className="rounded-full bg-black px-3 py-1 text-sm text-white">
+        <Chip active={view !== 'timeline'} onClick={() => updateParams({ view: null })}>
           Grid
-        </button>
-        <button
-          type="button"
-          disabled
-          title="coming soon"
-          aria-pressed="false"
-          className="cursor-not-allowed rounded-full border border-black/20 px-3 py-1 text-sm text-black/40"
-        >
+        </Chip>
+        <Chip active={view === 'timeline'} onClick={() => updateParams({ view: 'timeline' })}>
           Timeline
-        </button>
+        </Chip>
       </div>
     </div>
   )

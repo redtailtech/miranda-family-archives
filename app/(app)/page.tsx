@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { LibraryControls } from '@/components/library-controls'
 import { MediaGrid } from '@/components/media-grid'
+import { TimelineView } from '@/components/timeline-view'
 
 type SearchParams = Record<string, string | string[] | undefined>
 
@@ -18,6 +19,7 @@ export default async function LibraryPage({
   const type = first(sp.type)
   const decade = first(sp.decade)
   const albumId = first(sp.albumId)
+  const view = first(sp.view)
 
   const [yearRows, albums] = await Promise.all([
     prisma.mediaItem.findMany({
@@ -46,7 +48,7 @@ export default async function LibraryPage({
     <div>
       <h1 className="mb-6 text-3xl font-bold">Library</h1>
       <LibraryControls decades={decades} albums={albums} />
-      <MediaGrid query={query} />
+      {view === 'timeline' ? <TimelineView /> : <MediaGrid query={query} />}
     </div>
   )
 }

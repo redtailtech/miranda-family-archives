@@ -82,34 +82,7 @@ export function MediaGrid({ query }: { query?: string } = {}) {
     <div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {items.map((item) => (
-          <Link
-            key={item.id}
-            href={`/media/${item.id}`}
-            className="relative block aspect-square overflow-hidden rounded-xl bg-black/5"
-          >
-            {item.thumbUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.thumbUrl} alt={item.title ?? item.originalFilename} className="h-full w-full object-cover" />
-            ) : (
-              <span className="flex h-full items-center justify-center p-2 text-center text-sm">
-                {item.status === 'FAILED' ? (
-                  <span className="rounded-full bg-red-100 px-3 py-1 text-red-700">Failed</span>
-                ) : (
-                  <span className="rounded-full bg-black/10 px-3 py-1">
-                    {item.status === 'UPLOADING' ? 'Uploading…' : 'Processing…'}
-                  </span>
-                )}
-              </span>
-            )}
-            {item.type === 'DOCUMENT' && (
-              <span aria-label="document" className="absolute right-2 top-2 rounded bg-white/80 px-1">📄</span>
-            )}
-            {item.heartCount > 0 && (
-              <span className="absolute bottom-2 left-2 rounded bg-white/80 px-1 text-sm">
-                ❤️ {item.heartCount}
-              </span>
-            )}
-          </Link>
+          <MediaTile key={item.id} item={item} />
         ))}
       </div>
       <div ref={sentinel} className="h-8" />
@@ -120,5 +93,37 @@ export function MediaGrid({ query }: { query?: string } = {}) {
         </p>
       )}
     </div>
+  )
+}
+
+export function MediaTile({ item }: { item: MediaItemDTO }) {
+  return (
+    <Link
+      href={`/media/${item.id}`}
+      className="relative block aspect-square overflow-hidden rounded-xl bg-black/5"
+    >
+      {item.thumbUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.thumbUrl} alt={item.title ?? item.originalFilename} className="h-full w-full object-cover" />
+      ) : (
+        <span className="flex h-full items-center justify-center p-2 text-center text-sm">
+          {item.status === 'FAILED' ? (
+            <span className="rounded-full bg-red-100 px-3 py-1 text-red-700">Failed</span>
+          ) : (
+            <span className="rounded-full bg-black/10 px-3 py-1">
+              {item.status === 'UPLOADING' ? 'Uploading…' : 'Processing…'}
+            </span>
+          )}
+        </span>
+      )}
+      {item.type === 'DOCUMENT' && (
+        <span aria-label="document" className="absolute right-2 top-2 rounded bg-white/80 px-1">📄</span>
+      )}
+      {item.heartCount > 0 && (
+        <span className="absolute bottom-2 left-2 rounded bg-white/80 px-1 text-sm">
+          ❤️ {item.heartCount}
+        </span>
+      )}
+    </Link>
   )
 }
