@@ -1,4 +1,4 @@
-import { createWriteStream } from 'node:fs'
+import { createReadStream, createWriteStream } from 'node:fs'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,12 +6,16 @@ import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { createHash } from 'node:crypto'
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { s3, BUCKET } from '@/lib/s3'
 import { derivedKey } from '@/lib/media'
+import { dHash, hammingHex } from '@/lib/dupes'
+
+const NEAR_MATCH_MAX_HAMMING = 6
 
 const execFileAsync = promisify(execFile)
 
@@ -53,6 +57,10 @@ export async function processMedia(mediaId: string) {
 
     const exif = await extractExif(originalPath)
 
+    const contentHash = await hashFile(originalPath)
+    const perceptualHash = item.type === 'PHOTO' ? await computePerceptualHash(sourceImagePath) : null
+    const duplicateOfId = await findDuplicate(mediaId, contentHash, perceptualHash)
+
     await prisma.mediaItem.update({
       where: { id: mediaId },
       data: {
@@ -62,11 +70,67 @@ export async function processMedia(mediaId: string) {
         exif: (exif ?? undefined) as Prisma.InputJsonValue | undefined,
         status: 'READY',
         error: null,
+        contentHash,
+        perceptualHash,
+        duplicateOfId,
       },
     })
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+}
+
+/** SHA-256 of the original file, streamed so a 500MB TIFF never sits in memory. */
+async function hashFile(path: string): Promise<string> {
+  const hash = createHash('sha256')
+  await pipeline(createReadStream(path), hash)
+  return hash.digest('hex')
+}
+
+async function computePerceptualHash(sourceImagePath: string): Promise<string> {
+  const raw = await sharp(sourceImagePath, { limitInputPixels: false })
+    .grayscale()
+    .resize(9, 8, { fit: 'fill' })
+    .raw()
+    .toBuffer()
+  return dHash(raw)
+}
+
+/**
+ * Exact contentHash match (any type) takes precedence over a near (dHash)
+ * match, which only applies to PHOTOs. Excludes self and soft-deleted items.
+ * Family-scale dataset — loading all photos' {id, perceptualHash} is fine.
+ */
+async function findDuplicate(
+  selfId: string,
+  contentHash: string,
+  perceptualHash: string | null
+): Promise<string | null> {
+  const exact = await prisma.mediaItem.findFirst({
+    where: { id: { not: selfId }, deletedAt: null, contentHash },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  })
+  if (exact) return exact.id
+
+  if (!perceptualHash) return null
+
+  const candidates = await prisma.mediaItem.findMany({
+    where: {
+      id: { not: selfId },
+      deletedAt: null,
+      type: 'PHOTO',
+      perceptualHash: { not: null },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, perceptualHash: true },
+  })
+  for (const candidate of candidates) {
+    if (candidate.perceptualHash && hammingHex(perceptualHash, candidate.perceptualHash) <= NEAR_MATCH_MAX_HAMMING) {
+      return candidate.id
+    }
+  }
+  return null
 }
 
 async function renderPdfPage1(originalPath: string, dir: string): Promise<string> {

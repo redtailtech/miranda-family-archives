@@ -75,6 +75,9 @@ model MediaItem {
   dateIsApproximate Boolean     @default(false)
   uploadedById      String
   uploadedBy        User        @relation(fields: [uploadedById], references: [id])
+  contentHash       String?
+  perceptualHash    String?
+  duplicateOfId     String?
   deletedAt         DateTime?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
@@ -87,6 +90,7 @@ model MediaItem {
   @@index([status])
   @@index([dateYear])
   @@index([deletedAt])
+  @@index([contentHash])
 }
 
 model Person {

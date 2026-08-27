@@ -320,9 +320,31 @@ export function Uploader() {
     }
     uppy.on('cancel-all', handleCancelAll)
 
+    // Filename-only duplicate pre-check, batched per files-added event, before
+    // any upload starts. Warn-don't-block: a decline just removes the file
+    // from the batch; the server never rejects an upload on this basis.
+    const handleFilesAdded = async (files: ReturnType<typeof uppy.getFile>[]) => {
+      const names = files.map((f) => f.name).filter((n): n is string => Boolean(n))
+      if (names.length === 0) return
+      try {
+        const { duplicates } = await api('/api/uploads/check', { filenames: names })
+        const dupNames = new Set<string>(duplicates)
+        for (const file of files) {
+          if (!file.name || !dupNames.has(file.name)) continue
+          const keep = confirm(`A file called "${file.name}" is already in the archive. Upload it anyway?`)
+          if (!keep) uppy.removeFile(file.id)
+        }
+      } catch (err) {
+        // Non-fatal: the check is a UX affordance only, never blocks upload.
+        console.error('duplicate filename check failed:', err)
+      }
+    }
+    uppy.on('files-added', handleFilesAdded)
+
     return () => {
       uppy.off('upload-success', handleUploadSuccess)
       uppy.off('cancel-all', handleCancelAll)
+      uppy.off('files-added', handleFilesAdded)
     }
   }, [uppy])
 

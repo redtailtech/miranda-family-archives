@@ -54,6 +54,26 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         </p>
       )}
 
+      {dto.duplicateOf && (
+        <div className="mt-6 flex flex-wrap items-center gap-4 rounded-xl border border-amber/40 bg-wash p-4">
+          {dto.duplicateOf.thumbUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={dto.duplicateOf.thumbUrl}
+              alt=""
+              className="h-16 w-16 shrink-0 rounded-lg object-cover"
+            />
+          )}
+          <p className="flex-1 text-lg">
+            This might be a duplicate of{' '}
+            <Link href={`/media/${dto.duplicateOf.id}`} className="font-medium underline">
+              {dto.duplicateOf.title ?? dto.duplicateOf.filename}
+            </Link>
+            . It&apos;s okay to keep both — an admin can delete one from its page.
+          </p>
+        </div>
+      )}
+
       <div className="mt-6 flex flex-wrap items-center gap-4">
         <a
           href={`/api/media/${dto.id}/download`}

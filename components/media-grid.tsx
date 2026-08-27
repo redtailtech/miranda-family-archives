@@ -135,6 +135,15 @@ export function MediaTile({ item }: { item: MediaItemDTO }) {
       {item.type === 'DOCUMENT' && (
         <span aria-label="document" className="absolute right-2 top-2 rounded-md bg-surface/90 px-1.5 py-0.5">📄</span>
       )}
+      {item.duplicateOfId && (
+        <span
+          aria-label="possible duplicate"
+          title="Possible duplicate"
+          className="absolute right-2 bottom-2 rounded-md bg-amber-deep/90 px-1.5 py-0.5 text-sm font-semibold text-white"
+        >
+          2×
+        </span>
+      )}
       {item.heartCount > 0 && (
         <span className="absolute bottom-2 left-2 rounded-md bg-surface/90 px-1.5 py-0.5 text-base">
           ❤️ {item.heartCount}

@@ -1,4 +1,5 @@
 import type { MediaItem, MediaPerson, Person, User } from '@prisma/client'
+import { prisma } from '@/lib/db'
 import { signGetUrl } from '@/lib/s3'
 import { personToLite, type PersonLite } from '@/lib/people'
 
@@ -53,6 +54,8 @@ export type MediaItemDTO = {
   heartCount: number
   heartedByMe: boolean
   people?: PersonLite[]
+  duplicateOfId: string | null
+  duplicateOf?: { id: string; title: string | null; filename: string; thumbUrl: string | null } | null
 }
 
 export type MediaItemWithSocial = MediaItem & {
@@ -86,6 +89,7 @@ export async function mediaItemToDTO(
     thumbUrl: item.thumbKey ? await signGetUrl(item.thumbKey) : null,
     heartCount: item._count?.hearts ?? 0,
     heartedByMe: Array.isArray(item.hearts) && item.hearts.length > 0,
+    duplicateOfId: item.duplicateOfId,
   }
   if (opts.detail) {
     dto.webUrl = item.webKey ? await signGetUrl(item.webKey) : null
@@ -96,6 +100,20 @@ export async function mediaItemToDTO(
     if (item.people) {
       const tagged = item.people.filter((mp) => mp.person.deletedAt === null)
       dto.people = await Promise.all(tagged.map((mp) => personToLite(mp.person)))
+    }
+    if (item.duplicateOfId) {
+      const target = await prisma.mediaItem.findFirst({
+        where: { id: item.duplicateOfId, deletedAt: null },
+        select: { id: true, title: true, originalFilename: true, thumbKey: true },
+      })
+      dto.duplicateOf = target
+        ? {
+            id: target.id,
+            title: target.title,
+            filename: target.originalFilename,
+            thumbUrl: target.thumbKey ? await signGetUrl(target.thumbKey) : null,
+          }
+        : null
     }
   }
   return dto
