@@ -298,12 +298,25 @@ function computeGenerationsJointFixedPoint(
  * determinism (e.g. former-spouse T and current-spouse C on either side of
  * Susan sort so the walk is deterministic regardless of discovery order).
  *
+ * Clusters of 2 or fewer members are returned unchanged (existing discovery
+ * order), BEFORE the graph-shape checks below — this is a SIZE gate, not a
+ * `former`-flag gate, so it applies uniformly whether or not either spouse
+ * link is former (keeping "former is pure passthrough" true). A 2-member
+ * cluster (a plain couple, current or former) is trivially already a path of
+ * one edge, so the shape checks below would happily reorder it too — but
+ * path-disambiguation only has a visual point once there are 3+ members to
+ * place (deciding which end of the row an outlier spouse sits on); for an
+ * ordinary couple there is no ambiguity to resolve, and reordering by id would
+ * needlessly flip every existing couple's left/right placement for zero
+ * benefit. So plain couples keep whatever order `buildGenerationItems`'s BFS
+ * discovered them in, same as before this feature existed.
+ *
  * Falls back to returning `members` unchanged (the existing BFS discovery
  * order) for anything that isn't a simple path — triangles, stars of degree
  * >= 3, or (defensively) a walk that doesn't reach every member.
  */
 function orderClusterAsPath(members: string[], adj: Map<string, string[]>): string[] {
-  if (members.length <= 1) return members
+  if (members.length <= 2) return members
 
   const memberSet = new Set(members)
   const neighborsOf = new Map<string, string[]>()
