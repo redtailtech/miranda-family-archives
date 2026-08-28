@@ -15,6 +15,7 @@ const LABELS: Record<string, string> = {
   dateYear: 'the year', dateMonth: 'the month', dateDay: 'the day',
   dateIsApproximate: 'the approximate-date flag', deletedAt: 'deleted', filename: 'the file',
   people: 'the people', back: 'the back photo', backOf: 'the front photo',
+  spouses: 'the spouses',
 }
 
 function fieldSentence(field: string, from: unknown, to: unknown): string {

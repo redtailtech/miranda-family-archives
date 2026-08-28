@@ -3,12 +3,14 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import type { PersonDTO, PersonLite } from '@/lib/people'
 import { PersonAvatar } from '@/components/person-avatar'
 import { PersonPicker } from '@/components/person-picker'
 import { useConfirm } from '@/components/confirm-dialog'
 
 type RelationKind = 'parents' | 'spouses'
+type SpouseLite = PersonLite & { former: boolean }
 
 const CONFIG: Record<RelationKind, { path: string; bodyKey: string; queryKey: string; label: string }> = {
   parents: { path: 'parents', bodyKey: 'parentId', queryKey: 'parentId', label: 'parent' },
@@ -21,6 +23,7 @@ export function PersonRelations({ person }: { person: PersonDTO }) {
   const [adding, setAdding] = useState<RelationKind | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [formerChecked, setFormerChecked] = useState(false)
 
   const excludeIds = [
     person.id,
@@ -29,17 +32,23 @@ export function PersonRelations({ person }: { person: PersonDTO }) {
     ...person.children.map((p) => p.id),
   ]
 
-  async function addRelation(kind: RelationKind, other: PersonLite) {
+  function cancelAdd() {
+    setAdding(null)
+    setFormerChecked(false)
+  }
+
+  async function addRelation(kind: RelationKind, other: PersonLite, extra?: Record<string, unknown>) {
     const { path, bodyKey } = CONFIG[kind]
     setError('')
     try {
       const res = await fetch(`/api/people/${person.id}/${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [bodyKey]: other.id }),
+        body: JSON.stringify({ [bodyKey]: other.id, ...extra }),
       })
       if (res.ok) {
         setAdding(null)
+        setFormerChecked(false)
         router.refresh()
       } else {
         let msg = `HTTP ${res.status}`
@@ -83,6 +92,31 @@ export function PersonRelations({ person }: { person: PersonDTO }) {
     }
   }
 
+  async function toggleSpouseFormer(spouse: SpouseLite) {
+    setError('')
+    setBusyId(spouse.id)
+    try {
+      const res = await fetch(`/api/people/${person.id}/spouses`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spouseId: spouse.id, former: !spouse.former }),
+      })
+      setBusyId(null)
+      if (res.ok) {
+        router.refresh()
+      } else {
+        let msg = `HTTP ${res.status}`
+        try {
+          msg = (await res.json()).error ?? msg
+        } catch {}
+        setError(msg)
+      }
+    } catch {
+      setBusyId(null)
+      setError("Couldn't save — check your connection and try again.")
+    }
+  }
+
   return (
     <div className="grid gap-8">
       {error && <p className="text-lg text-red-700">{error}</p>}
@@ -94,7 +128,7 @@ export function PersonRelations({ person }: { person: PersonDTO }) {
         addLabel="Add parent"
         adding={adding === 'parents'}
         onStartAdd={() => setAdding('parents')}
-        onCancelAdd={() => setAdding(null)}
+        onCancelAdd={cancelAdd}
         exclude={excludeIds}
         onPick={(p) => addRelation('parents', p)}
         onRemove={(p) => removeRelation('parents', p)}
@@ -107,10 +141,34 @@ export function PersonRelations({ person }: { person: PersonDTO }) {
         addLabel="Add spouse"
         adding={adding === 'spouses'}
         onStartAdd={() => setAdding('spouses')}
-        onCancelAdd={() => setAdding(null)}
+        onCancelAdd={cancelAdd}
         exclude={excludeIds}
-        onPick={(p) => addRelation('spouses', p)}
+        onPick={(p) => addRelation('spouses', p, { former: formerChecked })}
         onRemove={(p) => removeRelation('spouses', p)}
+        renderMeta={(p) =>
+          p.former ? <span className="mt-1 block text-lg text-ink-soft">Former spouse</span> : null
+        }
+        renderSecondaryAction={(p) => (
+          <button
+            type="button"
+            onClick={() => toggleSpouseFormer(p)}
+            disabled={busyId === p.id}
+            className="rounded-xl border px-4 py-2 text-lg disabled:opacity-50"
+          >
+            {p.former ? 'Mark as current spouse' : 'Mark as former spouse'}
+          </button>
+        )}
+        addExtra={
+          <label className="mt-3 flex min-h-11 items-center gap-3 text-lg">
+            <input
+              type="checkbox"
+              checked={formerChecked}
+              onChange={(e) => setFormerChecked(e.target.checked)}
+              className="h-5 w-5 shrink-0"
+            />
+            This is a former spouse (they were married or together before)
+          </label>
+        }
       />
 
       <ReadOnlySection
@@ -124,7 +182,7 @@ export function PersonRelations({ person }: { person: PersonDTO }) {
   )
 }
 
-function RelationSection({
+function RelationSection<T extends PersonLite>({
   title,
   people,
   busyId,
@@ -135,9 +193,12 @@ function RelationSection({
   exclude,
   onPick,
   onRemove,
+  renderMeta,
+  renderSecondaryAction,
+  addExtra,
 }: {
   title: string
-  people: PersonLite[]
+  people: T[]
   busyId: string | null
   addLabel: string
   adding: boolean
@@ -145,7 +206,10 @@ function RelationSection({
   onCancelAdd: () => void
   exclude: string[]
   onPick: (p: PersonLite) => void
-  onRemove: (p: PersonLite) => void
+  onRemove: (p: T) => void
+  renderMeta?: (p: T) => ReactNode
+  renderSecondaryAction?: (p: T) => ReactNode
+  addExtra?: ReactNode
 }) {
   return (
     <section>
@@ -161,6 +225,7 @@ function RelationSection({
       {adding && (
         <div className="mb-4 rounded-xl border p-4">
           <PersonPicker exclude={exclude} onPick={onPick} />
+          {addExtra}
           <button
             type="button"
             onClick={onCancelAdd}
@@ -178,9 +243,19 @@ function RelationSection({
           {people.map((p) => (
             <li key={p.id} className="flex items-center gap-4 rounded-xl border p-3">
               <PersonAvatar person={p} size="sm" />
-              <Link href={`/people/${p.id}`} className="flex-1 text-lg underline">
-                {p.displayName}
-              </Link>
+              {renderMeta ? (
+                <div className="flex-1">
+                  <Link href={`/people/${p.id}`} className="text-lg underline">
+                    {p.displayName}
+                  </Link>
+                  {renderMeta(p)}
+                </div>
+              ) : (
+                <Link href={`/people/${p.id}`} className="flex-1 text-lg underline">
+                  {p.displayName}
+                </Link>
+              )}
+              {renderSecondaryAction?.(p)}
               <button
                 type="button"
                 onClick={() => onRemove(p)}
