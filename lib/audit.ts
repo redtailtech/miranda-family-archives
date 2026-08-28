@@ -437,7 +437,10 @@ async function currentSpouseNames(tx: Prisma.TransactionClient, personId: string
     tx.spouse.findMany({ where: { personAId: personId }, include: { personB: true } }),
     tx.spouse.findMany({ where: { personBId: personId }, include: { personA: true } }),
   ])
-  return [...asA.map((r) => r.personB.displayName), ...asB.map((r) => r.personA.displayName)].sort()
+  return [
+    ...asA.map((r) => (r.former ? `${r.personB.displayName} (former)` : r.personB.displayName)),
+    ...asB.map((r) => (r.former ? `${r.personA.displayName} (former)` : r.personA.displayName)),
+  ].sort()
 }
 
 export async function addParentWithAudit(childId: string, parentId: string, actorUserId: string): Promise<void> {
@@ -517,7 +520,8 @@ export async function removeParentWithAudit(childId: string, parentId: string, a
 export async function addSpouseWithAudit(
   personAId: string,
   personBId: string,
-  actorUserId: string
+  actorUserId: string,
+  former = false
 ): Promise<void> {
   if (personAId === personBId)
     throw Object.assign(new Error('a person cannot be their own spouse'), { status: 400 })
@@ -538,7 +542,7 @@ export async function addSpouseWithAudit(
 
   await prisma.$transaction(async (tx) => {
     const beforeNames = await currentSpouseNames(tx, personAId)
-    await tx.spouse.create({ data: { personAId, personBId } })
+    await tx.spouse.create({ data: { personAId, personBId, former } })
     const afterNames = await currentSpouseNames(tx, personAId)
     await tx.auditLog.create({
       data: {
@@ -574,6 +578,55 @@ export async function removeSpouseWithAudit(
       await tx.spouse.delete({ where: { personAId_personBId: { personAId, personBId } } })
     } else {
       await tx.spouse.delete({ where: { personAId_personBId: { personAId: personBId, personBId: personAId } } })
+    }
+    const afterNames = await currentSpouseNames(tx, personAId)
+    await tx.auditLog.create({
+      data: {
+        userId: actorUserId,
+        entityType: 'person',
+        entityId: personAId,
+        action: 'UPDATE',
+        changes: { spouses: { from: beforeNames, to: afterNames } } as Prisma.InputJsonValue,
+      },
+    })
+  })
+}
+
+/**
+ * Sets the `former` flag on an existing spouse relationship, in either
+ * direction (mirrors removeSpouseWithAudit's forward/backward lookup).
+ * 404s if no link exists in either direction. Setting the current value is
+ * a quiet no-op: it succeeds without writing an audit row.
+ */
+export async function setSpouseFormerWithAudit(
+  personAId: string,
+  personBId: string,
+  actorUserId: string,
+  former: boolean
+): Promise<void> {
+  const forward = await prisma.spouse.findUnique({
+    where: { personAId_personBId: { personAId, personBId } },
+  })
+  const backward = forward
+    ? null
+    : await prisma.spouse.findUnique({
+        where: { personAId_personBId: { personAId: personBId, personBId: personAId } },
+      })
+  if (!forward && !backward)
+    throw Object.assign(new Error('that spouse relationship does not exist'), { status: 404 })
+
+  const row = forward ?? backward!
+  if (row.former === former) return
+
+  await prisma.$transaction(async (tx) => {
+    const beforeNames = await currentSpouseNames(tx, personAId)
+    if (forward) {
+      await tx.spouse.update({ where: { personAId_personBId: { personAId, personBId } }, data: { former } })
+    } else {
+      await tx.spouse.update({
+        where: { personAId_personBId: { personAId: personBId, personBId: personAId } },
+        data: { former },
+      })
     }
     const afterNames = await currentSpouseNames(tx, personAId)
     await tx.auditLog.create({

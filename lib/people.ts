@@ -18,7 +18,7 @@ export type PersonDTO = PersonLite & {
   tagCount: number
   parents: PersonLite[]
   children: PersonLite[]
-  spouses: PersonLite[]
+  spouses: (PersonLite & { former: boolean })[]
   siblings: PersonLite[]
   createdAt: string
 }
@@ -63,11 +63,16 @@ export async function personToDTO(personId: string): Promise<PersonDTO | null> {
 
   const parents = dedupeById(person.parents.map((r) => r.parent).filter((p) => p.deletedAt === null))
   const children = dedupeById(person.children.map((r) => r.child).filter((p) => p.deletedAt === null))
-  const spouses = dedupeById(
-    [...person.spousesA.map((r) => r.personB), ...person.spousesB.map((r) => r.personA)].filter(
-      (p) => p.deletedAt === null
-    )
-  )
+  const spouseLinks = [
+    ...person.spousesA.map((r) => ({ person: r.personB, former: r.former })),
+    ...person.spousesB.map((r) => ({ person: r.personA, former: r.former })),
+  ].filter((l) => l.person.deletedAt === null)
+  const seenSpouseIds = new Set<string>()
+  const spouses = spouseLinks.filter((l) => {
+    if (seenSpouseIds.has(l.person.id)) return false
+    seenSpouseIds.add(l.person.id)
+    return true
+  })
 
   // siblings: anyone sharing at least one parent, excluding self and deleted people
   const parentIds = parents.map((p) => p.id)
@@ -83,7 +88,7 @@ export async function personToDTO(personId: string): Promise<PersonDTO | null> {
     personToLite(person),
     Promise.all(parents.map(personToLite)),
     Promise.all(children.map(personToLite)),
-    Promise.all(spouses.map(personToLite)),
+    Promise.all(spouses.map(async (l) => ({ ...(await personToLite(l.person)), former: l.former }))),
     Promise.all(siblings.map(personToLite)),
   ])
 

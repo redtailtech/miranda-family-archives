@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       people: peopleLite,
       parentLinks: parentLinks.map((l) => ({ childId: l.childId, parentId: l.parentId })),
-      spouseLinks: spouseLinks.map((l) => ({ personAId: l.personAId, personBId: l.personBId })),
+      spouseLinks: spouseLinks.map((l) => ({ personAId: l.personAId, personBId: l.personBId, former: l.former })),
     })
   }
 
