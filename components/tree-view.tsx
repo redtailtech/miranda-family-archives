@@ -15,7 +15,7 @@ const MAX_ZOOM = 2.5
 type FullPeopleResponse = {
   people: PersonLite[]
   parentLinks: { childId: string; parentId: string }[]
-  spouseLinks: { personAId: string; personBId: string }[]
+  spouseLinks: { personAId: string; personBId: string; former?: boolean }[]
 }
 
 function clampZoom(z: number) {
@@ -182,6 +182,7 @@ export function TreeView() {
                     y2={b.y + CARD_H / 2}
                     stroke="#6a594b88"
                     strokeWidth={2}
+                    strokeDasharray={edge.former ? '6 6' : undefined}
                   />
                 )
               })}

@@ -81,7 +81,9 @@
 export type TreeNode = { id: string; x: number; y: number }
 export type TreeEdge =
   | { kind: 'parent'; from: string; to: string } // parent -> child
-  | { kind: 'spouse'; a: string; b: string }
+  | { kind: 'spouse'; a: string; b: string; former: boolean }
+/** Shared spouse-link input shape: `former` is optional (defaults false) so existing callers/tests stay valid. */
+type SpouseLinkInput = { personAId: string; personBId: string; former?: boolean }
 /** A single vertical connector segment (drop or riser): x is fixed, y1 is the top, y2 the bottom. */
 export type FamilySegment = { x: number; y1: number; y2: number }
 /** One family-unit connector: shared parents' drops + a lane-separated rail + children's risers. */
@@ -154,7 +156,7 @@ function computeRawGenerations(
  * union-find over spouseLinks; generation of a group = max generation in it. */
 function pullSpousesToSameGeneration(
   peopleIds: string[],
-  spouseLinks: { personAId: string; personBId: string }[],
+  spouseLinks: SpouseLinkInput[],
   rawGen: Map<string, number>
 ): Map<string, number> {
   const knownIds = new Set(peopleIds)
@@ -215,7 +217,7 @@ function pullSpousesToSameGeneration(
 function computeGenerationsJointFixedPoint(
   peopleIds: string[],
   parentLinks: { childId: string; parentId: string }[],
-  spouseLinks: { personAId: string; personBId: string }[],
+  spouseLinks: SpouseLinkInput[],
   rawGen: Map<string, number>
 ): Map<string, number> {
   const knownIds = new Set(peopleIds)
@@ -285,10 +287,55 @@ function computeGenerationsJointFixedPoint(
   return gen
 }
 
+/**
+ * Orders a cluster's members as a path through its spouse-link subgraph when
+ * that subgraph IS a simple path: every member has degree <= 2 (counting only
+ * distinct in-cluster neighbors) and there are exactly two degree-1 members
+ * (endpoints). A connected graph with max degree 2 and exactly two degree-1
+ * vertices can only be a simple path (a cycle would have zero degree-1
+ * vertices), so no separate connectivity check is needed on top of these two
+ * conditions. Walk starts at the degree-1 endpoint whose id sorts lower, for
+ * determinism (e.g. former-spouse T and current-spouse C on either side of
+ * Susan sort so the walk is deterministic regardless of discovery order).
+ *
+ * Falls back to returning `members` unchanged (the existing BFS discovery
+ * order) for anything that isn't a simple path — triangles, stars of degree
+ * >= 3, or (defensively) a walk that doesn't reach every member.
+ */
+function orderClusterAsPath(members: string[], adj: Map<string, string[]>): string[] {
+  if (members.length <= 1) return members
+
+  const memberSet = new Set(members)
+  const neighborsOf = new Map<string, string[]>()
+  for (const m of members) {
+    const raw = adj.get(m) ?? []
+    neighborsOf.set(m, [...new Set(raw.filter((n) => memberSet.has(n) && n !== m))])
+  }
+
+  if ([...neighborsOf.values()].some((ns) => ns.length > 2)) return members
+  const endpoints = members.filter((m) => neighborsOf.get(m)!.length === 1)
+  if (endpoints.length !== 2) return members
+
+  const start = [...endpoints].sort()[0]
+  const ordered: string[] = [start]
+  const visited = new Set<string>([start])
+  let prev = start
+  let cur: string | undefined = neighborsOf.get(start)![0]
+  while (cur !== undefined && !visited.has(cur)) {
+    ordered.push(cur)
+    visited.add(cur)
+    const next: string | undefined = neighborsOf.get(cur)!.find((n) => n !== prev)
+    prev = cur
+    cur = next
+  }
+
+  return ordered.length === members.length ? ordered : members
+}
+
 /** Step 3a: group a generation's people into clusters (spouses stay adjacent). */
 function buildGenerationItems(
   genPeopleIdsInOrder: string[],
-  spouseLinks: { personAId: string; personBId: string }[]
+  spouseLinks: SpouseLinkInput[]
 ): Item[] {
   const genSet = new Set(genPeopleIdsInOrder)
   const adj = new Map<string, string[]>()
@@ -317,7 +364,7 @@ function buildGenerationItems(
       }
       i++
     }
-    items.push({ members })
+    items.push({ members: orderClusterAsPath(members, adj) })
   }
   return items
 }
@@ -374,7 +421,7 @@ function buildGenerationItems(
  */
 function centerParentsOverChildren(
   peopleIds: string[],
-  spouseLinks: { personAId: string; personBId: string }[],
+  spouseLinks: SpouseLinkInput[],
   childrenOfParent: Map<string, string[]>,
   finalGen: Map<string, number>,
   maxGen: number,
@@ -564,7 +611,7 @@ function computeFamilyConnectors(
 export function layoutTree(
   people: { id: string }[],
   parentLinks: { childId: string; parentId: string }[],
-  spouseLinks: { personAId: string; personBId: string }[],
+  spouseLinks: SpouseLinkInput[],
   opts: LayoutOpts = DEFAULT_OPTS
 ): TreeLayout {
   if (people.length === 0) return { nodes: [], edges: [], connectors: [], width: 0, height: 0 }
@@ -650,9 +697,9 @@ export function layoutTree(
   const nodes: TreeNode[] = peopleIds.map((id) => positions.get(id)!)
 
   const edges: TreeEdge[] = []
-  for (const { personAId, personBId } of spouseLinks) {
+  for (const { personAId, personBId, former } of spouseLinks) {
     if (!knownIds.has(personAId) || !knownIds.has(personBId)) continue
-    edges.push({ kind: 'spouse', a: personAId, b: personBId })
+    edges.push({ kind: 'spouse', a: personAId, b: personBId, former: former ?? false })
   }
   for (const { childId, parentId } of parentLinks) {
     if (!knownIds.has(childId) || !knownIds.has(parentId)) continue
