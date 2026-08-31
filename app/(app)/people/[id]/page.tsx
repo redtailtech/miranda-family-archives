@@ -36,7 +36,9 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
         </div>
         <div>
           <h1 className="text-3xl font-bold">{person.displayName}</h1>
-          {person.maidenName && <p className="text-lg text-black/60">née {person.maidenName}</p>}
+          {person.maidenName && (
+            <p className="text-lg text-black/60">Maiden name: {person.maidenName}</p>
+          )}
           {years && <p className="text-lg text-black/60">{years}</p>}
           {person.birthplace && <p className="text-lg text-black/60">{person.birthplace}</p>}
         </div>
