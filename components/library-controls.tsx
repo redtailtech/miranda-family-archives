@@ -148,13 +148,12 @@ export function LibraryFilterPills({
   const decadeLabel = decade ? `${decade}s` : 'Any'
   const albumLabel = albumId ? (albums.find((a) => a.id === albumId)?.name ?? 'All') : 'All'
 
-  const personValue = untagged === '1' ? 'untagged' : (personId ?? 'everyone')
-  const personLabel =
-    untagged === '1'
+  const personValue = personId ?? (untagged === '1' ? 'untagged' : 'everyone')
+  const personLabel = personId
+    ? (people.find((p) => p.id === personId)?.displayName ?? 'Everyone')
+    : untagged === '1'
       ? 'No one tagged'
-      : personId
-        ? (people.find((p) => p.id === personId)?.displayName ?? 'Everyone')
-        : 'Everyone'
+      : 'Everyone'
 
   function onPersonChange(value: string) {
     if (value === 'untagged') set({ untagged: '1', personId: null })
