@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 type Album = { id: string; name: string }
-type PersonChip = { id: string; displayName: string }
+type PersonChip = { id: string; displayName: string; photoCount: number }
 
 function updateParams(
   router: ReturnType<typeof useRouter>,
@@ -211,7 +211,10 @@ export function LibraryFilterPills({
                   <DropdownMenuRadioItem value="everyone">Everyone</DropdownMenuRadioItem>
                   {people.map((p) => (
                     <DropdownMenuRadioItem key={p.id} value={p.id}>
-                      {p.displayName}
+                      <span className="flex w-full items-center gap-4 whitespace-nowrap">
+                        <span className="flex-1">{p.displayName}</span>
+                        <span className="text-base text-ink-soft">{p.photoCount}</span>
+                      </span>
                     </DropdownMenuRadioItem>
                   ))}
                 </div>

@@ -23,7 +23,7 @@ export default async function LibraryPage({
   const personId = first(sp.personId)
   const view = first(sp.view)
 
-  const [yearRows, albums, people] = await Promise.all([
+  const [yearRows, albums, peopleRows, tagCounts] = await Promise.all([
     prisma.mediaItem.findMany({
       where: { deletedAt: null, dateYear: { not: null } },
       distinct: ['dateYear'],
@@ -35,7 +35,16 @@ export default async function LibraryPage({
       select: { id: true, displayName: true },
       orderBy: { displayName: 'asc' },
     }),
+    // Per-person counts must match what picking that person shows: tags on
+    // live, non-back items only (same constraints buildMediaWhere applies).
+    prisma.mediaPerson.groupBy({
+      by: ['personId'],
+      where: { mediaItem: { deletedAt: null, backOfId: null } },
+      _count: { _all: true },
+    }),
   ])
+  const countByPerson = new Map(tagCounts.map((t) => [t.personId, t._count._all]))
+  const people = peopleRows.map((p) => ({ ...p, photoCount: countByPerson.get(p.id) ?? 0 }))
 
   const decades = Array.from(
     new Set(yearRows.map((r) => Math.floor((r.dateYear as number) / 10) * 10))
