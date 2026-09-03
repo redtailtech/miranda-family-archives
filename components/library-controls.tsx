@@ -28,12 +28,11 @@ function updateParams(
   router.replace(qs ? `/?${qs}` : '/')
 }
 
-/** The search input, shown above the photo grid in the main column. Hidden in
- * timeline view (as today). */
+/** The search input, shown above the photo grid in the main column. Applies
+ * in timeline view too — the timeline is filterable like the grid. */
 export function LibrarySearch() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const view = searchParams.get('view')
 
   const [q, setQ] = useState(searchParams.get('q') ?? '')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -63,11 +62,6 @@ export function LibrarySearch() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q])
-
-  // The timeline is its own chronological view of everything — search doesn't
-  // apply there.
-  const isTimeline = view === 'timeline'
-  if (isTimeline) return null
 
   return (
     <div className="mb-6">
@@ -109,9 +103,8 @@ function FilterPill({ active, label, children }: { active: boolean; label: strin
 }
 
 /** The row of filter pills shown under the search bar: Show, Decade, Album,
- * Viewing (each a dropdown), plus the Grid/Timeline view toggle. Hidden
- * (aside from the view toggle) in timeline mode — the timeline is its own
- * chronological view of everything, so the filters don't apply there. */
+ * Viewing (each a dropdown), plus the Grid/Timeline view toggle. The same row
+ * renders in both grid and timeline mode — the timeline is filterable too. */
 export function LibraryFilterPills({
   decades,
   albums,
@@ -132,8 +125,6 @@ export function LibraryFilterPills({
   const view = searchParams.get('view')
 
   const set = (next: Record<string, string | null>) => updateParams(router, searchParams, next)
-
-  const isTimeline = view === 'timeline'
 
   const showValue = backs === '1' ? 'backs' : type === 'PHOTO' ? 'photos' : type === 'DOCUMENT' ? 'documents' : 'everything'
   const showLabel = {
@@ -156,72 +147,68 @@ export function LibraryFilterPills({
 
   return (
     <div className="mb-6 flex flex-wrap items-center gap-2">
-      {!isTimeline && (
-        <>
-          <FilterPill active={showValue !== 'everything'} label={`Show: ${showLabel}`}>
-            <DropdownMenuRadioGroup value={showValue} onValueChange={onShowChange}>
-              <DropdownMenuRadioItem value="everything">Everything</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="photos">Photos</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="documents">Documents</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="backs">Photo backs</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </FilterPill>
+      <FilterPill active={showValue !== 'everything'} label={`Show: ${showLabel}`}>
+        <DropdownMenuRadioGroup value={showValue} onValueChange={onShowChange}>
+          <DropdownMenuRadioItem value="everything">Everything</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="photos">Photos</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="documents">Documents</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="backs">Photo backs</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </FilterPill>
 
-          {decades.length > 0 && (
-            <FilterPill active={!!decade} label={`Decade: ${decadeLabel}`}>
-              <DropdownMenuRadioGroup
-                value={decade ?? 'any'}
-                onValueChange={(value) => set({ decade: value === 'any' ? null : value })}
-              >
-                <DropdownMenuRadioItem value="any">Any</DropdownMenuRadioItem>
-                {decades.map((d) => (
-                  <DropdownMenuRadioItem key={d} value={String(d)}>
-                    {d}s
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </FilterPill>
-          )}
+      {decades.length > 0 && (
+        <FilterPill active={!!decade} label={`Decade: ${decadeLabel}`}>
+          <DropdownMenuRadioGroup
+            value={decade ?? 'any'}
+            onValueChange={(value) => set({ decade: value === 'any' ? null : value })}
+          >
+            <DropdownMenuRadioItem value="any">Any</DropdownMenuRadioItem>
+            {decades.map((d) => (
+              <DropdownMenuRadioItem key={d} value={String(d)}>
+                {d}s
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </FilterPill>
+      )}
 
-          {albums.length > 0 && (
-            <FilterPill active={!!albumId} label={`Album: ${albumLabel}`}>
-              <DropdownMenuRadioGroup
-                value={albumId ?? 'all'}
-                onValueChange={(value) => set({ albumId: value === 'all' ? null : value })}
-              >
-                <div className="max-h-80 overflow-y-auto">
-                  <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-                  {albums.map((a) => (
-                    <DropdownMenuRadioItem key={a.id} value={a.id}>
-                      {a.name}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </div>
-              </DropdownMenuRadioGroup>
-            </FilterPill>
-          )}
+      {albums.length > 0 && (
+        <FilterPill active={!!albumId} label={`Album: ${albumLabel}`}>
+          <DropdownMenuRadioGroup
+            value={albumId ?? 'all'}
+            onValueChange={(value) => set({ albumId: value === 'all' ? null : value })}
+          >
+            <div className="max-h-80 overflow-y-auto">
+              <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+              {albums.map((a) => (
+                <DropdownMenuRadioItem key={a.id} value={a.id}>
+                  {a.name}
+                </DropdownMenuRadioItem>
+              ))}
+            </div>
+          </DropdownMenuRadioGroup>
+        </FilterPill>
+      )}
 
-          {people.length > 0 && (
-            <FilterPill active={!!personId} label={`Viewing: ${personLabel}`}>
-              <DropdownMenuRadioGroup
-                value={personId ?? 'everyone'}
-                onValueChange={(value) => set({ personId: value === 'everyone' ? null : value })}
-              >
-                <div className="max-h-80 overflow-y-auto">
-                  <DropdownMenuRadioItem value="everyone">Everyone</DropdownMenuRadioItem>
-                  {people.map((p) => (
-                    <DropdownMenuRadioItem key={p.id} value={p.id}>
-                      <span className="flex w-full items-center gap-4 whitespace-nowrap">
-                        <span className="flex-1">{p.displayName}</span>
-                        <span className="text-base text-ink-soft">{p.photoCount}</span>
-                      </span>
-                    </DropdownMenuRadioItem>
-                  ))}
-                </div>
-              </DropdownMenuRadioGroup>
-            </FilterPill>
-          )}
-        </>
+      {people.length > 0 && (
+        <FilterPill active={!!personId} label={`Viewing: ${personLabel}`}>
+          <DropdownMenuRadioGroup
+            value={personId ?? 'everyone'}
+            onValueChange={(value) => set({ personId: value === 'everyone' ? null : value })}
+          >
+            <div className="max-h-80 overflow-y-auto">
+              <DropdownMenuRadioItem value="everyone">Everyone</DropdownMenuRadioItem>
+              {people.map((p) => (
+                <DropdownMenuRadioItem key={p.id} value={p.id}>
+                  <span className="flex w-full items-center gap-4 whitespace-nowrap">
+                    <span className="flex-1">{p.displayName}</span>
+                    <span className="text-base text-ink-soft">{p.photoCount}</span>
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </div>
+          </DropdownMenuRadioGroup>
+        </FilterPill>
       )}
 
       <div className="flex gap-2" role="group" aria-label="View">

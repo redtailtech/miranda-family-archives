@@ -1,27 +1,55 @@
 import { auth } from '@clerk/nextjs/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { mediaItemToDTO, type MediaItemDTO } from '@/lib/media'
+import { buildMediaWhere } from '@/app/api/media/route'
 
 /**
  * Whole-archive timeline view: READY, non-deleted items grouped by decade and
  * year (nulls → "undated"), decades desc, years desc within decade, items by
- * createdAt desc within year. Ignores search/type/decade/album filters — it's
- * a browsing view of everything, not a filtered query.
+ * createdAt desc within year. Accepts the same filter params as the list
+ * route (`q`, `type`, `backs`, `decade`, `albumId`, `personId`, `favorite`)
+ * via the shared `buildMediaWhere`, with `status: 'READY'` merged on top —
+ * timeline only ever shows processed items.
  *
- * No pagination: single `findMany` over the whole archive, grouped in JS.
- * Fine at family scale (low thousands of items); revisit (e.g. paginate by
- * decade, or move grouping into SQL) if the archive outgrows an in-memory
- * findMany.
+ * No pagination: single `findMany` over the (filtered) archive, grouped in
+ * JS. Fine at family scale (low thousands of items); revisit (e.g. paginate
+ * by decade, or move grouping into SQL) if the archive outgrows an
+ * in-memory findMany.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const viewer = await prisma.user.findUnique({ where: { clerkId: userId } })
   const viewerUserId = viewer?.id
 
+  const favoriteOnly = req.nextUrl.searchParams.get('favorite') === '1'
+
+  // Mirrors the list route's guard: if favorite=1 but the viewer has no User
+  // row yet (Clerk-webhook sync race), return an empty timeline instead of
+  // silently dropping the filter and showing the full archive.
+  if (favoriteOnly && !viewerUserId) {
+    return NextResponse.json({ decades: [], undated: [] })
+  }
+
+  const where = {
+    ...buildMediaWhere(
+      {
+        q: req.nextUrl.searchParams.get('q'),
+        type: req.nextUrl.searchParams.get('type'),
+        decade: req.nextUrl.searchParams.get('decade'),
+        albumId: req.nextUrl.searchParams.get('albumId'),
+        favorite: req.nextUrl.searchParams.get('favorite'),
+        personId: req.nextUrl.searchParams.get('personId'),
+        backs: req.nextUrl.searchParams.get('backs'),
+      },
+      viewerUserId
+    ),
+    status: 'READY' as const,
+  }
+
   const items = await prisma.mediaItem.findMany({
-    where: { status: 'READY', deletedAt: null, backOfId: null },
+    where,
     orderBy: { createdAt: 'desc' },
     include: {
       uploadedBy: true,

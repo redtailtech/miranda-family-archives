@@ -67,7 +67,7 @@ export default async function LibraryPage({
       <h1 className="mb-6 text-3xl font-bold">Library</h1>
       <LibrarySearch />
       <LibraryFilterPills decades={decades} albums={albums} people={people} />
-      {view === 'timeline' ? <TimelineView /> : <MediaGrid query={query} />}
+      {view === 'timeline' ? <TimelineView query={query} /> : <MediaGrid query={query} />}
     </div>
   )
 }
