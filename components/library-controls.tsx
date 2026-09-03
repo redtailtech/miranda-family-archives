@@ -95,7 +95,8 @@ function FilterPill({ active, label, children }: { active: boolean; label: strin
           <ChevronDown size={18} aria-hidden className="shrink-0" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-56 max-w-[90vw]">
+      {/* w-auto overrides the primitive's pin-to-trigger width so long names fit */}
+      <DropdownMenuContent align="start" className="w-auto min-w-56 max-w-[90vw]">
         {children}
       </DropdownMenuContent>
     </DropdownMenu>
