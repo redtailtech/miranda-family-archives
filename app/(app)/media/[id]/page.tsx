@@ -32,10 +32,32 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
   const dto = await mediaItemToDTO(item, { detail: true, viewerUserId: viewer?.id })
   const sizeMB = (dto.originalSize / (1024 * 1024)).toFixed(1)
 
+  // Backs carry no details of their own — the details section (and its
+  // form/tagger) operate on the FRONT item, so edits land on the front's
+  // record. See .superpowers/sdd/2026-09-03-back-shows-front-details/.
+  const backOfId = dto.backOfId
+  const isBack = Boolean(backOfId)
+  const front = backOfId
+    ? await prisma.mediaItem.findFirst({
+        where: { id: backOfId, deletedAt: null },
+        include: {
+          uploadedBy: true,
+          _count: { select: { hearts: true } },
+          hearts: viewer ? { where: { userId: viewer.id } } : false,
+          people: { include: { person: true } },
+        },
+      })
+    : null
+  const frontDto = front ? await mediaItemToDTO(front, { detail: true, viewerUserId: viewer?.id }) : null
+
   return (
     <div className="mx-auto max-w-4xl">
       <BackLink fallback="/" label="← Back" />
-      <h1 className="my-4 text-3xl font-bold">{dto.title ?? dto.originalFilename}</h1>
+      <h1 className="my-4 text-3xl font-bold">
+        {isBack
+          ? `Back of ${frontDto?.title ?? frontDto?.originalFilename ?? dto.title ?? dto.originalFilename}`
+          : (dto.title ?? dto.originalFilename)}
+      </h1>
 
       {dto.backOf && (
         <div className="mb-4 flex items-center gap-4 rounded-xl border border-amber/40 bg-wash p-4">
@@ -95,37 +117,64 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
           href={`/api/media/${dto.id}/download`}
           className="rounded-xl bg-black px-6 py-3 text-lg text-white"
         >
-          Download original ({sizeMB} MB)
+          {isBack ? `Download this back (${sizeMB} MB)` : `Download original (${sizeMB} MB)`}
         </a>
-        <HeartButton mediaId={dto.id} initialCount={dto.heartCount} initialHearted={dto.heartedByMe} />
+        {!isBack && <HeartButton mediaId={dto.id} initialCount={dto.heartCount} initialHearted={dto.heartedByMe} />}
         {dto.status === 'FAILED' && <RetryButton id={dto.id} />}
         {viewer?.role === 'ADMIN' && <AdminItemActions id={dto.id} deleted={false} />}
       </div>
 
-      <DetailTabs
-        details={
-          <>
-            <dl className="grid grid-cols-2 gap-2 text-lg">
-              <dt className="font-semibold">Uploaded by</dt><dd>{dto.uploadedBy?.name ?? 'Unknown'}</dd>
-              <dt className="font-semibold">Uploaded</dt><dd>{new Date(dto.createdAt).toLocaleDateString()}</dd>
-              <dt className="font-semibold">File</dt><dd>{dto.originalFilename} ({dto.mimeType})</dd>
-            </dl>
-            <div className="mt-8">
-              <PeopleTagger mediaId={dto.id} people={dto.people ?? []} />
-            </div>
-            <div className="mt-8">
-              <MediaEditForm item={dto} />
-            </div>
-          </>
-        }
-        advanced={<ExifTable exif={dto.exif} type={dto.type} />}
-        history={<HistoryList mediaId={dto.id} />}
-      />
+      {!isBack && (
+        <>
+          <DetailTabs
+            details={
+              <>
+                <dl className="grid grid-cols-2 gap-2 text-lg">
+                  <dt className="font-semibold">Uploaded by</dt><dd>{dto.uploadedBy?.name ?? 'Unknown'}</dd>
+                  <dt className="font-semibold">Uploaded</dt><dd>{new Date(dto.createdAt).toLocaleDateString()}</dd>
+                  <dt className="font-semibold">File</dt><dd>{dto.originalFilename} ({dto.mimeType})</dd>
+                </dl>
+                <div className="mt-8">
+                  <PeopleTagger mediaId={dto.id} people={dto.people ?? []} />
+                </div>
+                <div className="mt-8">
+                  <MediaEditForm item={dto} />
+                </div>
+              </>
+            }
+            advanced={<ExifTable exif={dto.exif} type={dto.type} />}
+            history={<HistoryList mediaId={dto.id} />}
+          />
 
-      <div className="mt-8">
-        <h2 className="mb-4 text-2xl font-bold">Comments</h2>
-        <CommentThread mediaId={dto.id} />
-      </div>
+          <div className="mt-8">
+            <h2 className="mb-4 text-2xl font-bold">Comments</h2>
+            <CommentThread mediaId={dto.id} />
+          </div>
+        </>
+      )}
+
+      {isBack && (
+        <div className="mt-8">
+          <h2 className="mb-4 text-2xl font-bold">Photo details</h2>
+          {frontDto ? (
+            <>
+              <p className="mt-2 text-lg text-ink-soft">
+                These details belong to the photo — the back is just its other side.
+              </p>
+              <div className="mt-8">
+                <PeopleTagger mediaId={frontDto.id} people={frontDto.people ?? []} />
+              </div>
+              <div className="mt-8">
+                <MediaEditForm item={frontDto} />
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 text-lg text-ink-soft">
+              This is the back of a photo that&apos;s in Deleted items.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
