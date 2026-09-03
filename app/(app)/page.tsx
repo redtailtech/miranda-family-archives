@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { LibraryFilters, LibrarySearch } from '@/components/library-controls'
+import { LibraryFilterPills, LibrarySearch } from '@/components/library-controls'
 import { MediaGrid } from '@/components/media-grid'
 import { TimelineView } from '@/components/timeline-view'
 
@@ -56,15 +56,9 @@ export default async function LibraryPage({
   return (
     <div>
       <h1 className="mb-6 text-3xl font-bold">Library</h1>
-      <div className="lg:flex lg:gap-8">
-        <aside className="mb-6 lg:mb-0 lg:w-64 lg:shrink-0">
-          <LibraryFilters decades={decades} albums={albums} people={people} />
-        </aside>
-        <div className="min-w-0 flex-1">
-          <LibrarySearch />
-          {view === 'timeline' ? <TimelineView /> : <MediaGrid query={query} />}
-        </div>
-      </div>
+      <LibrarySearch />
+      <LibraryFilterPills decades={decades} albums={albums} people={people} />
+      {view === 'timeline' ? <TimelineView /> : <MediaGrid query={query} />}
     </div>
   )
 }

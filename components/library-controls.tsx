@@ -2,6 +2,14 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { ChevronDown } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 type Album = { id: string; name: string }
 type PersonChip = { id: string; displayName: string }
@@ -75,9 +83,36 @@ export function LibrarySearch() {
   )
 }
 
-/** The filter sidebar: view toggle plus, when not timeline, the type chips,
- * decades, albums, and people groups. */
-export function LibraryFilters({
+/** A compact dropdown pill: shows the current selection and opens a menu of
+ * choices. Visually a `Chip` with a chevron, so it reads as openable. */
+function FilterPill({ active, label, children }: { active: boolean; label: string; children: ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={`flex min-h-11 items-center gap-1 rounded-full px-4 py-2 text-lg transition-colors ${
+            active
+              ? 'bg-ink font-medium text-paper'
+              : 'border border-ink/25 bg-surface text-ink-soft hover:bg-wash hover:text-ink'
+          }`}
+        >
+          {label}
+          <ChevronDown size={18} aria-hidden className="shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        {children}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** The row of filter pills shown under the search bar: Show, Decade, Album,
+ * Viewing (each a dropdown), plus the Grid/Timeline view toggle. Hidden
+ * (aside from the view toggle) in timeline mode — the timeline is its own
+ * chronological view of everything, so the filters don't apply there. */
+export function LibraryFilterPills({
   decades,
   albums,
   people,
@@ -98,92 +133,101 @@ export function LibraryFilters({
 
   const set = (next: Record<string, string | null>) => updateParams(router, searchParams, next)
 
-  // The timeline is its own chronological view of everything — the filter
-  // chips don't apply there, so only the view toggle is shown.
   const isTimeline = view === 'timeline'
 
+  const showValue = backs === '1' ? 'backs' : type === 'PHOTO' ? 'photos' : type === 'DOCUMENT' ? 'documents' : 'everything'
+  const showLabel = {
+    everything: 'Everything',
+    photos: 'Photos',
+    documents: 'Documents',
+    backs: 'Photo backs',
+  }[showValue]
+
+  function onShowChange(value: string) {
+    if (value === 'photos') set({ type: 'PHOTO', backs: null })
+    else if (value === 'documents') set({ type: 'DOCUMENT', backs: null })
+    else if (value === 'backs') set({ backs: '1', type: null })
+    else set({ type: null, backs: null })
+  }
+
+  const decadeLabel = decade ? `${decade}s` : 'Any'
+  const albumLabel = albumId ? (albums.find((a) => a.id === albumId)?.name ?? 'All') : 'All'
+  const personLabel = personId ? (people.find((p) => p.id === personId)?.displayName ?? 'Everyone') : 'Everyone'
+
   return (
-    <div className="mb-6 space-y-5 lg:mb-0">
+    <div className="mb-6 flex flex-wrap items-center gap-2">
       {!isTimeline && (
         <>
-          <div className="space-y-2">
-            <p className="text-base font-semibold text-ink-soft">Show</p>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by type">
-              <Chip active={!type} onClick={() => set({ type: null, backs: null })}>
-                All
-              </Chip>
-              <Chip active={type === 'PHOTO'} onClick={() => set({ type: 'PHOTO', backs: null })}>
-                Photos
-              </Chip>
-              <Chip active={type === 'DOCUMENT'} onClick={() => set({ type: 'DOCUMENT', backs: null })}>
-                Documents
-              </Chip>
-              <Chip active={backs === '1'} onClick={() => set({ backs: backs === '1' ? null : '1', type: null })}>
-                Photo backs
-              </Chip>
-            </div>
-          </div>
+          <FilterPill active={showValue !== 'everything'} label={`Show: ${showLabel}`}>
+            <DropdownMenuRadioGroup value={showValue} onValueChange={onShowChange}>
+              <DropdownMenuRadioItem value="everything">Everything</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="photos">Photos</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="documents">Documents</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="backs">Photo backs</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </FilterPill>
 
           {decades.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-base font-semibold text-ink-soft">Decades</p>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by decade">
-                <Chip active={!decade} onClick={() => set({ decade: null })}>
-                  All decades
-                </Chip>
+            <FilterPill active={!!decade} label={`Decade: ${decadeLabel}`}>
+              <DropdownMenuRadioGroup
+                value={decade ?? 'any'}
+                onValueChange={(value) => set({ decade: value === 'any' ? null : value })}
+              >
+                <DropdownMenuRadioItem value="any">Any</DropdownMenuRadioItem>
                 {decades.map((d) => (
-                  <Chip key={d} active={decade === String(d)} onClick={() => set({ decade: String(d) })}>
+                  <DropdownMenuRadioItem key={d} value={String(d)}>
                     {d}s
-                  </Chip>
+                  </DropdownMenuRadioItem>
                 ))}
-              </div>
-            </div>
+              </DropdownMenuRadioGroup>
+            </FilterPill>
           )}
 
           {albums.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-base font-semibold text-ink-soft">Albums</p>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by album">
-                <Chip active={!albumId} onClick={() => set({ albumId: null })}>
-                  All albums
-                </Chip>
-                {albums.map((a) => (
-                  <Chip key={a.id} active={albumId === a.id} onClick={() => set({ albumId: a.id })}>
-                    {a.name}
-                  </Chip>
-                ))}
-              </div>
-            </div>
+            <FilterPill active={!!albumId} label={`Album: ${albumLabel}`}>
+              <DropdownMenuRadioGroup
+                value={albumId ?? 'all'}
+                onValueChange={(value) => set({ albumId: value === 'all' ? null : value })}
+              >
+                <div className="max-h-80 overflow-y-auto">
+                  <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+                  {albums.map((a) => (
+                    <DropdownMenuRadioItem key={a.id} value={a.id}>
+                      {a.name}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </div>
+              </DropdownMenuRadioGroup>
+            </FilterPill>
           )}
 
           {people.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-base font-semibold text-ink-soft">People</p>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by person">
-                <Chip active={!personId} onClick={() => set({ personId: null })}>
-                  Everyone
-                </Chip>
-                {people.map((p) => (
-                  <Chip key={p.id} active={personId === p.id} onClick={() => set({ personId: p.id })}>
-                    {p.displayName}
-                  </Chip>
-                ))}
-              </div>
-            </div>
+            <FilterPill active={!!personId} label={`Viewing: ${personLabel}`}>
+              <DropdownMenuRadioGroup
+                value={personId ?? 'everyone'}
+                onValueChange={(value) => set({ personId: value === 'everyone' ? null : value })}
+              >
+                <div className="max-h-80 overflow-y-auto">
+                  <DropdownMenuRadioItem value="everyone">Everyone</DropdownMenuRadioItem>
+                  {people.map((p) => (
+                    <DropdownMenuRadioItem key={p.id} value={p.id}>
+                      {p.displayName}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </div>
+              </DropdownMenuRadioGroup>
+            </FilterPill>
           )}
         </>
       )}
 
-      <div className="space-y-2">
-        <p className="text-base font-semibold text-ink-soft">View</p>
-        <div className="flex gap-2" role="group" aria-label="View">
-          <Chip active={view !== 'timeline'} onClick={() => set({ view: null })}>
-            Grid
-          </Chip>
-          <Chip active={view === 'timeline'} onClick={() => set({ view: 'timeline' })}>
-            Timeline
-          </Chip>
-        </div>
+      <div className="flex gap-2" role="group" aria-label="View">
+        <Chip active={view !== 'timeline'} onClick={() => set({ view: null })}>
+          Grid
+        </Chip>
+        <Chip active={view === 'timeline'} onClick={() => set({ view: 'timeline' })}>
+          Timeline
+        </Chip>
       </div>
     </div>
   )
