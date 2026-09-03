@@ -110,10 +110,12 @@ export function LibraryFilterPills({
   decades,
   albums,
   people,
+  untaggedCount,
 }: {
   decades: number[]
   albums: Album[]
   people: PersonChip[]
+  untaggedCount: number
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -123,6 +125,7 @@ export function LibraryFilterPills({
   const decade = searchParams.get('decade')
   const albumId = searchParams.get('albumId')
   const personId = searchParams.get('personId')
+  const untagged = searchParams.get('untagged')
   const view = searchParams.get('view')
 
   const set = (next: Record<string, string | null>) => updateParams(router, searchParams, next)
@@ -144,7 +147,20 @@ export function LibraryFilterPills({
 
   const decadeLabel = decade ? `${decade}s` : 'Any'
   const albumLabel = albumId ? (albums.find((a) => a.id === albumId)?.name ?? 'All') : 'All'
-  const personLabel = personId ? (people.find((p) => p.id === personId)?.displayName ?? 'Everyone') : 'Everyone'
+
+  const personValue = untagged === '1' ? 'untagged' : (personId ?? 'everyone')
+  const personLabel =
+    untagged === '1'
+      ? 'No one tagged'
+      : personId
+        ? (people.find((p) => p.id === personId)?.displayName ?? 'Everyone')
+        : 'Everyone'
+
+  function onPersonChange(value: string) {
+    if (value === 'untagged') set({ untagged: '1', personId: null })
+    else if (value === 'everyone') set({ personId: null, untagged: null })
+    else set({ personId: value, untagged: null })
+  }
 
   return (
     <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -192,13 +208,18 @@ export function LibraryFilterPills({
       )}
 
       {people.length > 0 && (
-        <FilterPill active={!!personId} label={`Viewing: ${personLabel}`}>
-          <DropdownMenuRadioGroup
-            value={personId ?? 'everyone'}
-            onValueChange={(value) => set({ personId: value === 'everyone' ? null : value })}
-          >
+        <FilterPill active={!!personId || untagged === '1'} label={`Viewing: ${personLabel}`}>
+          <DropdownMenuRadioGroup value={personValue} onValueChange={onPersonChange}>
+            <DropdownMenuRadioItem value="everyone">Everyone</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="untagged">
+              <span className="flex w-full items-center gap-4 whitespace-nowrap">
+                <span className="flex-1">No one tagged</span>
+                <span className="text-base text-ink-soft">{untaggedCount}</span>
+              </span>
+            </DropdownMenuRadioItem>
+            {/* Pinned above the scrollable list (with Everyone/No one tagged)
+                so it never scrolls out of view on long people lists. */}
             <div className="max-h-80 overflow-y-auto">
-              <DropdownMenuRadioItem value="everyone">Everyone</DropdownMenuRadioItem>
               {people.map((p) => (
                 <DropdownMenuRadioItem key={p.id} value={p.id}>
                   <span className="flex w-full items-center gap-4 whitespace-nowrap">

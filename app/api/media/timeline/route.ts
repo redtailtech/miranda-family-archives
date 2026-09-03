@@ -8,9 +8,9 @@ import { buildMediaWhere } from '@/app/api/media/route'
  * Whole-archive timeline view: READY, non-deleted items grouped by decade and
  * year (nulls → "undated"), decades desc, years desc within decade, items by
  * createdAt desc within year. Accepts the same filter params as the list
- * route (`q`, `type`, `backs`, `decade`, `albumId`, `personId`, `favorite`)
- * via the shared `buildMediaWhere`, with `status: 'READY'` merged on top —
- * timeline only ever shows processed items.
+ * route (`q`, `type`, `backs`, `decade`, `albumId`, `personId`, `untagged`,
+ * `favorite`) via the shared `buildMediaWhere`, with `status: 'READY'` merged
+ * on top — timeline only ever shows processed items.
  *
  * No pagination: single `findMany` over the (filtered) archive, grouped in
  * JS. Fine at family scale (low thousands of items); revisit (e.g. paginate
@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
         favorite: req.nextUrl.searchParams.get('favorite'),
         personId: req.nextUrl.searchParams.get('personId'),
         backs: req.nextUrl.searchParams.get('backs'),
+        untagged: req.nextUrl.searchParams.get('untagged'),
       },
       viewerUserId
     ),

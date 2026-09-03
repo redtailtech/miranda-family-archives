@@ -21,9 +21,10 @@ export default async function LibraryPage({
   const decade = first(sp.decade)
   const albumId = first(sp.albumId)
   const personId = first(sp.personId)
+  const untagged = first(sp.untagged)
   const view = first(sp.view)
 
-  const [yearRows, albums, peopleRows, tagCounts] = await Promise.all([
+  const [yearRows, albums, peopleRows, tagCounts, untaggedCount] = await Promise.all([
     prisma.mediaItem.findMany({
       where: { deletedAt: null, dateYear: { not: null } },
       distinct: ['dateYear'],
@@ -41,6 +42,11 @@ export default async function LibraryPage({
       by: ['personId'],
       where: { mediaItem: { deletedAt: null, backOfId: null } },
       _count: { _all: true },
+    }),
+    // Same constraints as the per-person counts above, for the "No one
+    // tagged" option's count to stay consistent with what picking it shows.
+    prisma.mediaItem.count({
+      where: { deletedAt: null, backOfId: null, people: { none: {} } },
     }),
   ])
   const countByPerson = new Map(tagCounts.map((t) => [t.personId, t._count._all]))
@@ -60,13 +66,14 @@ export default async function LibraryPage({
   if (decade) queryParams.set('decade', decade)
   if (albumId) queryParams.set('albumId', albumId)
   if (personId) queryParams.set('personId', personId)
+  if (untagged) queryParams.set('untagged', untagged)
   const query = queryParams.toString()
 
   return (
     <div>
       <h1 className="mb-6 text-3xl font-bold">Library</h1>
       <LibrarySearch />
-      <LibraryFilterPills decades={decades} albums={albums} people={people} />
+      <LibraryFilterPills decades={decades} albums={albums} people={people} untaggedCount={untaggedCount} />
       {view === 'timeline' ? <TimelineView query={query} /> : <MediaGrid query={query} />}
     </div>
   )

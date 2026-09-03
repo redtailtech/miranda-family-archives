@@ -24,6 +24,7 @@ export function buildMediaWhere(
     favorite?: string | null
     personId?: string | null
     backs?: string | null
+    untagged?: string | null
   },
   viewerUserId: string | undefined
 ): Prisma.MediaItemWhereInput {
@@ -57,7 +58,9 @@ export function buildMediaWhere(
     ...(type ? { type: type as 'PHOTO' | 'DOCUMENT' } : {}),
     ...(decadeStart !== null ? { dateYear: { gte: decadeStart, lte: decadeStart + 9 } } : {}),
     ...(albumId ? { albumItems: { some: { albumId } } } : {}),
-    ...(personId ? { people: { some: { personId } } } : {}),
+    // untagged is mutually exclusive with personId — a stale URL carrying
+    // both (e.g. a saved link) has personId win and untagged is ignored.
+    ...(personId ? { people: { some: { personId } } } : params.untagged === '1' ? { people: { none: {} } } : {}),
     // Explicit personal picks always show, even backs: a favorited back must
     // still appear on /favorites, so the default backs-are-hidden exclusion
     // only applies when the viewer isn't asking for their favorites.
@@ -92,6 +95,7 @@ export async function GET(req: NextRequest) {
       favorite: req.nextUrl.searchParams.get('favorite'),
       personId: req.nextUrl.searchParams.get('personId'),
       backs: req.nextUrl.searchParams.get('backs'),
+      untagged: req.nextUrl.searchParams.get('untagged'),
     },
     viewerUserId
   )
