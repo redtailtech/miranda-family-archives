@@ -148,7 +148,7 @@ export function TreeView() {
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerLeave={endDrag}
-        className={`relative h-[70vh] w-full overflow-hidden rounded-xl border bg-wash/50 ${
+        className={`relative h-[70vh] w-full select-none overflow-hidden rounded-xl border bg-wash/50 ${
           dragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
         style={{ touchAction: 'none' }}
