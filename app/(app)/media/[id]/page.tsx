@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import { mediaItemToDTO } from '@/lib/media'
+import { BackLink } from '@/components/back-link'
 import { RetryButton } from '@/components/retry-button'
 import { DetailTabs } from '@/components/detail-tabs'
 import { MediaEditForm } from '@/components/media-edit-form'
@@ -33,7 +34,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div className="mx-auto max-w-4xl">
-      <Link href="/" className="text-lg underline">← Library</Link>
+      <BackLink fallback="/" label="← Back" />
       <h1 className="my-4 text-3xl font-bold">{dto.title ?? dto.originalFilename}</h1>
 
       {dto.backOf && (
