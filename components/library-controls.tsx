@@ -30,13 +30,25 @@ export function LibrarySearch() {
   const [q, setQ] = useState(searchParams.get('q') ?? '')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Kept in sync every render so the debounced callback below can read the
+  // params as of when it *fires*, not the (possibly stale) params snapshot
+  // it closed over when it was scheduled. Without this, typing and then
+  // clicking a filter chip within the 300ms window would have the delayed
+  // q-write rebuild the URL from the pre-click snapshot and silently drop
+  // the chip param the click just set.
+  const searchParamsRef = useRef(searchParams)
+  useEffect(() => {
+    searchParamsRef.current = searchParams
+  })
+
   // Debounce the search input: only push it into the URL (and thus trigger a
   // MediaGrid refetch) 300ms after the user stops typing.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      const current = searchParams.get('q') ?? ''
-      if (q !== current) updateParams(router, searchParams, { q: q || null })
+      const currentParams = searchParamsRef.current
+      const current = currentParams.get('q') ?? ''
+      if (q !== current) updateParams(router, currentParams, { q: q || null })
     }, 300)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
